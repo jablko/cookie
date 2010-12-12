@@ -1,0 +1,108 @@
+#!/usr/bin/env python
+
+import socket
+from StringIO import StringIO
+from twisted.application import internet, service
+from twisted.internet import defer, protocol, reactor
+from twisted.mail import smtp
+
+application = service.Application('cookie')
+
+queue = []
+running = False
+
+class Client(smtp.SMTPClient):
+  def getMailData(self):
+    return queue[0].data
+
+  def getMailFrom(self):
+    global running
+
+    try:
+      return queue[0].user.orig
+
+    # No more messages to send
+    except IndexError:
+      running = False
+
+      return None
+
+  def getMailTo(self):
+    return [str(queue[0].user)]
+
+  def sentMail(self, code, resp, numOk, addresses, log):
+    global queue
+    queue[0].deferred.callback(None)
+    queue = queue[1:]
+
+# Cache our domain
+domain = socket.getfqdn()
+
+class ClientFactory(protocol.ClientFactory):
+  domain = domain
+  protocol = Client
+
+  def buildProtocol(self, addr):
+    return self.protocol(self.domain)
+
+# Buffer lines to .data, call .deferred on delivery success or failure
+class Message:
+  def eomReceived(self):
+    self.deferred = defer.Deferred()
+
+    return self.deferred
+
+  def lineReceived(self, line):
+    self.data.write(line + "\n")
+
+# Ignore lines, only buffer lines once per message, use for multiple recipients
+class NullMessage(Message):
+  def lineReceived(self, line):
+    pass
+
+class Server(smtp.SMTP):
+
+  # Don't add Received header because this is a content filter
+  def receivedHeader(self, helo, origin, recipients):
+    pass
+
+  # Message for first recipient
+  def validateFrom(self, helo, origin):
+    self.data = StringIO()
+    self.message = Message()
+
+    return origin
+
+  def validateTo(self, user):
+    global clientService, running
+
+    if not running:
+      try:
+        clientService.startService()
+
+      except NameError:
+        factory = ClientFactory()
+
+        clientService = internet.TCPClient('localhost', 1894, factory)
+        clientService.setServiceParent(application)
+
+      running = True
+
+    message = self.message
+    message.data = self.data
+    message.user = user
+
+    queue.append(message)
+
+    # NullMessage for subsequent recipients
+    self.message = NullMessage()
+
+    return lambda: message
+
+class ServerFactory(smtp.SMTPFactory):
+  protocol = Server
+
+factory = ServerFactory()
+
+serverService = internet.TCPServer(1438, factory, interface='localhost')
+serverService.setServiceParent(application)
