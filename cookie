@@ -52,6 +52,50 @@ class Message:
   def eomReceived(self):
     global clientService, running
 
+    # Use local newlines
+    CRLF = '\n'
+
+    WSP = '[\t ]'
+
+    # Folding white space
+    FWS = '(?:(?:' + WSP + ')*' + CRLF + ')?(?:' + WSP + ')+'
+
+    # Comments are recursive, add support later
+    CFWS = FWS
+
+    ALPHA = '[A-Za-z]'
+    DIGIT = '\d'
+
+    # Printable US-ASCII characters not including specials.  Used for atoms
+    atext = '(?:[!#$%&\'*+\-/=?^_`{|}~]|' + ALPHA + '|' + DIGIT + ')'
+
+    atom = '(?:' + CFWS + ')?(?:' + atext + ')+(?:' + CFWS + ')?'
+    DQUOTE = '"'
+
+    # Printable US-ASCII characters not including "\" or the quote character
+    qtext = '[!#-[\]-~]'
+
+    VCHAR = '[!-~]'
+    quotedPair = '\\\(?:' + VCHAR + '|' + WSP + ')'
+    qcontent = '(?:' + qtext + '|' + quotedPair + ')'
+    quotedString = '(?:' + CFWS + ')?' + DQUOTE + '(?:(?:' + FWS + ')?' + qcontent + ')*(?:' + FWS + ')?' + DQUOTE + '(?:' + CFWS + ')?'
+    word = '(?:' + atom + '|' + quotedString + ')'
+    phrase = '(?:' + word + ')+'
+    displayName = phrase
+    dotAtomText = '(?:' + atext + ')+(?:\.(?:' + atext + ')+)*'
+    dotAtom = '(?:' + CFWS + ')?' + dotAtomText + '(?:' + CFWS + ')?'
+    localPart = '(?:' + dotAtom + '|' + quotedString + ')'
+
+    # Printable US-ASCII characters not including "[", "]", or "\"
+    dtext = '[!-Z^-~]'
+
+    domainLiteral = '(?:' + CFWS + ')?\[(?:(?:' + FWS + ')?' + dtext + ')*(?:' + FWS + ')?](?:' + CFWS + ')?'
+    domain = '(?:' + dotAtom + '|' + domainLiteral + ')'
+    addrSpec = localPart + '@' + domain
+    angleAddr = '(?:(?:' + CFWS + ')?<)' + addrSpec + '(?:>(?:' + CFWS + ')?)'
+    nameAddr = '(?:' + displayName + ')?' + angleAddr
+    mailbox = '(?:' + nameAddr + '|' + addrSpec + ')'
+
     self.deferred = defer.Deferred()
 
     message.append(self)
