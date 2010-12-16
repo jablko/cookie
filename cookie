@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-import socket
+import base64, re, socket
+from Crypto.Cipher import AES
 from StringIO import StringIO
 from twisted.application import internet, service
 from twisted.internet import defer, protocol
@@ -15,6 +16,8 @@ running = False
 
 class Client(smtp.SMTPClient):
   def getMailData(self):
+    message[0].data.seek(0)
+
     return message[0].data
 
   def getMailFrom(self):
@@ -47,6 +50,9 @@ class ClientFactory(protocol.ClientFactory):
   def buildProtocol(self, addr):
     return self.protocol(self.domain)
 
+key = base64.b16decode('8c669a8a0f86bc02abd3516b9f90bd83d08a06ebd280fd0814053cbd706930ff', True)
+cipher = AES.new(key)
+
 # Buffer lines to .data, call .deferred on delivery success or failure
 class Message:
   def eomReceived(self):
@@ -78,23 +84,93 @@ class Message:
     VCHAR = '[!-~]'
     quotedPair = '\\\(?:' + VCHAR + '|' + WSP + ')'
     qcontent = '(?:' + qtext + '|' + quotedPair + ')'
-    quotedString = '(?:' + CFWS + ')?' + DQUOTE + '(?:(?:' + FWS + ')?' + qcontent + ')*(?:' + FWS + ')?' + DQUOTE + '(?:' + CFWS + ')?'
+    quotedString = '(' + CFWS + ')?' + DQUOTE + '(?:(?:' + FWS + ')?' + qcontent + ')*(?:' + FWS + ')?' + DQUOTE + '(?:' + CFWS + ')?'
     word = '(?:' + atom + '|' + quotedString + ')'
     phrase = '(?:' + word + ')+'
     displayName = phrase
     dotAtomText = '(?:' + atext + ')+(?:\.(?:' + atext + ')+)*'
-    dotAtom = '(?:' + CFWS + ')?' + dotAtomText + '(?:' + CFWS + ')?'
+    dotAtom = '(' + CFWS + ')?' + dotAtomText + '(' + CFWS + ')?'
     localPart = '(?:' + dotAtom + '|' + quotedString + ')'
 
     # Printable US-ASCII characters not including "[", "]", or "\"
     dtext = '[!-Z^-~]'
 
-    domainLiteral = '(?:' + CFWS + ')?\[(?:(?:' + FWS + ')?' + dtext + ')*(?:' + FWS + ')?](?:' + CFWS + ')?'
+    domainLiteral = '(?:' + CFWS + ')?\[(?:(?:' + FWS + ')?' + dtext + ')*(?:' + FWS + ')?](' + CFWS + ')?'
     domain = '(?:' + dotAtom + '|' + domainLiteral + ')'
     addrSpec = localPart + '@' + domain
-    angleAddr = '(?:(?:' + CFWS + ')?<)' + addrSpec + '(?:>(?:' + CFWS + ')?)'
-    nameAddr = '(?:' + displayName + ')?' + angleAddr
+    angleAddr = '((?:' + CFWS + ')?<)' + addrSpec + '(>(?:' + CFWS + ')?)'
+    nameAddr = '(' + displayName + ')?' + angleAddr
     mailbox = '(?:' + nameAddr + '|' + addrSpec + ')'
+
+    pattern = 'From:' + mailbox + CRLF
+
+    def repl(match):
+      sender = str(self.user)
+
+      # http://en.wikipedia.org/wiki/Block_cipher_modes_of_operation#Padding
+      sender += '\0' * (cipher.block_size - (len(sender) - 1) % cipher.block_size - 1)
+
+      sender = cipher.encrypt(sender)
+      sender = base64.b64encode(sender)
+      sender += '@nottheoilrig.com'
+
+      repl = 'From:'
+
+      # displayName
+      if match.group(1):
+        repl += match.group(1)
+
+      # angleAddr
+      if match.group(3):
+        repl += match.group(3)
+
+        # localPart dotAtom
+        if match.group(4):
+          repl += match.group(4)
+
+        # localPart quotedString
+        elif match.group(6):
+          repl += match.group(6)
+
+        repl += sender
+
+        # domain dotAtom
+        if match.group(8):
+          repl += match.group(8)
+
+        # domain domainLiteral
+        elif match.group(9):
+          repl += match.group(9)
+
+        repl += match.group(10)
+
+      else:
+
+        # localPart dotAtom
+        if match.group(11):
+          repl += match.group(11)
+
+        # localPart quotedString
+        elif match.group(13):
+          repl += match.group(13)
+
+        repl += sender
+
+        # domain dotAtom
+        if match.group(14):
+          repl += match.group(14)
+
+        # domain domainLiteral
+        elif match.group(16):
+          repl += match.group(16)
+
+      repl += '\n'
+
+      return repl
+
+    self.data.seek(0)
+    self.data.write(re.sub(pattern, repl, self.data.getvalue(), 1))
+    self.data.truncate()
 
     self.deferred = defer.Deferred()
 
