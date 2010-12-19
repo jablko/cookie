@@ -14,31 +14,51 @@ message = []
 # Can't otherwise tell if client is running or disconnecting
 running = False
 
-class Client(smtp.SMTPClient):
+class Client(smtp.ESMTPClient):
+
+  # Shortcut ESMTPClient.__init__(), no authentication or TLS
+  def __init__(self, *args, **kw):
+    self.secret = None
+
+    return smtp.SMTPClient.__init__(self, *args, **kw)
+
   def getMailData(self):
     message[0].data.seek(0)
 
     return message[0].data
 
   def getMailFrom(self):
-    global running
-
-    try:
-      return message[0].user.orig
-
-    # No more messages to send
-    except IndexError:
-      running = False
+    return message[0].user.orig
 
   def getMailTo(self):
     return [str(message[0].user)]
 
-  def sentMail(self, code, resp, numOk, addresses, log):
-    global message
+  # Wait for message from client
+  def smtpState_from(self, code, resp):
+    global deferred
+
+    if message:
+      return smtp.ESMTPClient.smtpState_from(self, code, resp)
+
+    deferred = defer.Deferred()
+    deferred.addCallback(lambda(result): smtp.ESMTPClient.smtpState_from(self, code, resp))
+
+  def smtpState_msgSent(self, code, resp):
+    global message, running
 
     message[0].deferred.callback(None)
 
     message = message[1:]
+    if message:
+      self._from = None
+      self.toAddressesResult = []
+
+      return smtp.ESMTPClient.smtpState_msgSent(self, code, resp)
+
+    # No more messages to send
+    running = False
+
+    self._disconnectFromServer()
 
 # Cache our domain
 domain = socket.getfqdn()
@@ -56,7 +76,6 @@ cipher = AES.new(key)
 # Buffer lines to .data, call .deferred on delivery success or failure
 class Message:
   def eomReceived(self):
-    global clientService, running
 
     # Use local newlines
     CRLF = '\n'
@@ -176,6 +195,22 @@ class Message:
 
     message.append(self)
 
+    deferred.callback(None)
+
+    return self.deferred
+
+  def lineReceived(self, line):
+    self.data.write(line + "\n")
+
+# Ignore lines, only buffer once per message, use for multiple recipients
+class NullMessage(Message):
+  def lineReceived(self, line):
+    pass
+
+class Server(smtp.ESMTP):
+  def connectionMade(self):
+    global clientService, running
+
     if not running:
       try:
         clientService.startService()
@@ -188,17 +223,7 @@ class Message:
 
       running = True
 
-    return self.deferred
-
-  def lineReceived(self, line):
-    self.data.write(line + "\n")
-
-# Ignore lines, only buffer once per message, use for multiple recipients
-class NullMessage(Message):
-  def lineReceived(self, line):
-    pass
-
-class Server(smtp.SMTP):
+    return smtp.ESMTP.connectionMade(self)
 
   # Suppress Received header because we're a content filter
   def receivedHeader(self, helo, origin, recipients):
@@ -221,6 +246,7 @@ class Server(smtp.SMTP):
 
     return lambda: message
 
+# ESMTPFactory doesn't exist
 class ServerFactory(smtp.SMTPFactory):
   protocol = Server
 
