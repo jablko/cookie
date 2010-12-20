@@ -9,6 +9,8 @@ from twisted.mail import smtp
 
 application = service.Application('cookie')
 
+ehlo = defer.Deferred()
+
 message = []
 
 # Can't otherwise tell if client is running or disconnecting
@@ -21,6 +23,15 @@ class Client(smtp.ESMTPClient):
     self.secret = None
 
     return smtp.SMTPClient.__init__(self, *args, **kw)
+
+  def esmtpState_serverConfig(self, *args, **kw):
+    try:
+      ehlo.callback(args)
+
+    except defer.AlreadyCalledError:
+      ehlo.result = args
+
+    return smtp.ESMTPClient.esmtpState_serverConfig(self, *args, **kw)
 
   def getMailData(self):
     message[0].data.seek(0)
@@ -224,6 +235,19 @@ class Server(smtp.ESMTP):
       running = True
 
     return smtp.ESMTP.connectionMade(self)
+
+  def do_EHLO(self, rest):
+    peer = self.transport.getPeer().host
+    self._helo = (rest, peer)
+    self._from = None
+    self._to = []
+
+    def callback(result):
+      self.sendCode(*result)
+
+      return result
+
+    ehlo.addCallback(callback)
 
   # Suppress Received header because we're a content filter
   def receivedHeader(self, helo, origin, recipients):
