@@ -143,75 +143,7 @@ class Message:
     nameAddr = '(' + displayName + ')?' + angleAddr
     mailbox = '(?:' + nameAddr + '|' + addrSpec + ')'
 
-    pattern = 'From:' + mailbox + CRLF
-
-    def repl(match):
-      sender = str(self.user)
-
-      # http://en.wikipedia.org/wiki/Block_cipher_modes_of_operation#Padding
-      sender += '\0' * (cipher.block_size - (len(sender) - 1) % cipher.block_size - 1)
-
-      sender = cipher.encrypt(sender)
-      sender = base64.b64encode(sender)
-      sender += '@nottheoilrig.com'
-
-      repl = 'From:'
-
-      # displayName
-      if match.group(1):
-        repl += match.group(1)
-
-      # angleAddr
-      if match.group(3):
-        repl += match.group(3)
-
-        # localPart dotAtom
-        if match.group(4):
-          repl += match.group(4)
-
-        # localPart quotedString
-        elif match.group(6):
-          repl += match.group(6)
-
-        repl += sender
-
-        # domain dotAtom
-        if match.group(8):
-          repl += match.group(8)
-
-        # domain domainLiteral
-        elif match.group(9):
-          repl += match.group(9)
-
-        repl += match.group(10)
-
-      else:
-
-        # localPart dotAtom
-        if match.group(11):
-          repl += match.group(11)
-
-        # localPart quotedString
-        elif match.group(13):
-          repl += match.group(13)
-
-        repl += sender
-
-        # domain dotAtom
-        if match.group(14):
-          repl += match.group(14)
-
-        # domain domainLiteral
-        elif match.group(16):
-          repl += match.group(16)
-
-      repl += '\n'
-
-      return repl
-
-    self.data.seek(0)
-    self.data.write(re.sub(pattern, repl, self.data.getvalue(), 1))
-    self.data.truncate()
+    From = 'From:' + mailbox + CRLF
 
     idLeft = dotAtomText
     noFoldLiteral = '\[(?:' + dtext + ')*]'
@@ -278,12 +210,10 @@ class Message:
     link = '(?:TCP|' + addtlLink + ')'
     via = CFWS + 'via' + FWS + link
 
-    # Additional standard names for protocols are registered with the Internet
-    # Assigned Numbers Authority (IANA) in the "mail parameters" registry.
-    # SMTP servers SHOULD NOT use unregistered names.
-    attdlProtocol = atom
+    # Upstream client authenticated,
+    # http://thread.gmane.org/gmane.mail.postfix.user/215958
+    protocol = 'ESMTPA'
 
-    protocol = '(?:ESMTP|SMTP|' + attdlProtocol + ')'
     With = CFWS + 'with' + FWS + protocol
     id = CFWS + 'id' + FWS + '(?:' + atom + '|' + msgId + ')'
     atDomain = '@' + domain
@@ -311,7 +241,78 @@ class Message:
     optInfo = '(?:' + via + ')?(?:' + With + ')?(?:' + id + ')?(?:' + For + ')?(?:' + additionalRegisteredClauses + ')?'
     stamp = fromDomain + byDomain + optInfo + '(?:' + CFWS + ')?;' + FWS + dateTime
 
-    pattern = 'Received:' + FWS + stamp + CRLF
+    timeStampLine = 'Received:' + FWS + stamp + CRLF
+
+    # No need to compile regex, most recent patterns are cached,
+    # http://docs.python.org/library/re#re.compile
+    if re.match(timeStampLine, self.data.getvalue()):
+      def repl(match):
+        sender = str(self.user)
+
+        # http://en.wikipedia.org/wiki/Block_cipher_modes_of_operation#Padding
+        sender += '\0' * (cipher.block_size - (len(sender) - 1) % cipher.block_size - 1)
+
+        sender = cipher.encrypt(sender)
+        sender = base64.b64encode(sender)
+        sender += '@nottheoilrig.com'
+
+        repl = 'From:'
+
+        # displayName
+        if match.group(1):
+          repl += match.group(1)
+
+        # angleAddr
+        if match.group(3):
+          repl += match.group(3)
+
+          # localPart dotAtom
+          if match.group(4):
+            repl += match.group(4)
+
+          # localPart quotedString
+          elif match.group(6):
+            repl += match.group(6)
+
+          repl += sender
+
+          # domain dotAtom
+          if match.group(8):
+            repl += match.group(8)
+
+          # domain domainLiteral
+          elif match.group(9):
+            repl += match.group(9)
+
+          repl += match.group(10)
+
+        else:
+
+          # localPart dotAtom
+          if match.group(11):
+            repl += match.group(11)
+
+          # localPart quotedString
+          elif match.group(13):
+            repl += match.group(13)
+
+          repl += sender
+
+          # domain dotAtom
+          if match.group(14):
+            repl += match.group(14)
+
+          # domain domainLiteral
+          elif match.group(16):
+            repl += match.group(16)
+
+        repl += '\n'
+
+        return repl
+
+      self.data.seek(0)
+      self.data.write(re.sub(From, repl, self.data.getvalue(), 1))
+      self.data.truncate()
 
     self.deferred = defer.Deferred()
 
