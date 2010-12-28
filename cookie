@@ -355,55 +355,45 @@ class Message:
       threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
     else:
-      def select():
-        conn = adbapi.Connection(pool)
-        trans = adbapi.Transaction(pool, conn)
+      match = re.search(messageId, self.data.getvalue())
+      if match:
+        def select():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
 
-        trans.execute('SELECT COUNT(*) FROM address WHERE sender = %s', self.user.dest.local)
-        result = trans.fetchall()
-        trans.close()
+          trans.execute('SELECT COUNT(*) FROM address WHERE sender = %s', self.user.dest.local)
+          result = trans.fetchall()
+          trans.close()
 
-        return result
+          return result
 
-      def callback(result):
-        if result[0][0]:
-          def insert():
-            conn = adbapi.Connection(pool)
-            trans = adbapi.Transaction(pool, conn)
+        def callback(result):
+          if result[0][0]:
+            def insert():
+              conn = adbapi.Connection(pool)
+              trans = adbapi.Transaction(pool, conn)
 
-            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user.orig, self.user.dest.local))
-            trans.close()
+              trans.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (match.group(1), self.user.dest.local))
+              trans.close()
 
-          def callback(result):
-            match = re.search(messageId, self.data.getvalue())
-            if match:
-              def insert():
-                conn = adbapi.Connection(pool)
-                trans = adbapi.Transaction(pool, conn)
-
-                trans.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (match.group(1), self.user.dest.local))
-                trans.close()
-
-              def callback(result):
-                message.append(self)
-
-                deferred.callback(None)
-
-              threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
-
-            else:
+            def callback(result):
               message.append(self)
 
               deferred.callback(None)
 
-          threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+            threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
 
-        else:
-          message.append(self)
+          else:
+            message.append(self)
 
-          deferred.callback(None)
+            deferred.callback(None)
 
-      threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+        threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+      else:
+        message.append(self)
+
+        deferred.callback(None)
 
     return self.deferred
 
