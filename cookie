@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-import base64, re, socket
-from Crypto.Cipher import AES
+import re, socket
+from random import random
 from StringIO import StringIO
 from twisted.application import internet, service
 from twisted.enterprise import adbapi
@@ -81,9 +81,6 @@ class ClientFactory(protocol.ClientFactory):
 
   def buildProtocol(self, addr):
     return self.protocol(self.domain)
-
-key = base64.b16decode('8c669a8a0f86bc02abd3516b9f90bd83d08a06ebd280fd0814053cbd706930ff', True)
-cipher = AES.new(key)
 
 pool = adbapi.ConnectionPool('MySQLdb', db='cookie', user='root')
 
@@ -255,82 +252,103 @@ class Message:
         conn = adbapi.Connection(pool)
         trans = adbapi.Transaction(pool, conn)
 
-        trans.execute('SELECT `key` FROM address WHERE address = %s', self.user)
+        trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
+        result = trans.fetchall()
+        trans.close()
 
-        return trans.fetchall()
+        return result
 
       def callback(result):
-        def repl(match):
-          sender = str(self.user)
-
-          # http://en.wikipedia.org/wiki/Block_cipher_modes_of_operation#Padding
-          sender += '\0' * (cipher.block_size - (len(sender) - 1) % cipher.block_size - 1)
-
-          sender = cipher.encrypt(sender)
-          sender = base64.b64encode(sender)
+        def sub(sender):
           sender += '@nottheoilrig.com'
 
-          repl = 'From:'
+          def repl(match):
+            repl = 'From:'
 
-          # displayName
-          if match.group(1):
-            repl += match.group(1)
+            # displayName
+            if match.group(1):
+              repl += match.group(1)
 
-          # angleAddr
-          if match.group(3):
-            repl += match.group(3)
+            # angleAddr
+            if match.group(3):
+              repl += match.group(3)
 
-            # localPart dotAtom
-            if match.group(4):
-              repl += match.group(4)
+              # localPart dotAtom
+              if match.group(4):
+                repl += match.group(4)
 
-            # localPart quotedString
-            elif match.group(6):
-              repl += match.group(6)
+              # localPart quotedString
+              elif match.group(6):
+                repl += match.group(6)
 
-            repl += sender
+              repl += sender
 
-            # domain dotAtom
-            if match.group(8):
-              repl += match.group(8)
+              # domain dotAtom
+              if match.group(8):
+                repl += match.group(8)
 
-            # domain domainLiteral
-            elif match.group(9):
-              repl += match.group(9)
+              # domain domainLiteral
+              elif match.group(9):
+                repl += match.group(9)
 
-            repl += match.group(10)
+              repl += match.group(10)
 
-          else:
+            else:
 
-            # localPart dotAtom
-            if match.group(11):
-              repl += match.group(11)
+              # localPart dotAtom
+              if match.group(11):
+                repl += match.group(11)
 
-            # localPart quotedString
-            elif match.group(13):
-              repl += match.group(13)
+              # localPart quotedString
+              elif match.group(13):
+                repl += match.group(13)
 
-            repl += sender
+              repl += sender
 
-            # domain dotAtom
-            if match.group(14):
-              repl += match.group(14)
+              # domain dotAtom
+              if match.group(14):
+                repl += match.group(14)
 
-            # domain domainLiteral
-            elif match.group(16):
-              repl += match.group(16)
+              # domain domainLiteral
+              elif match.group(16):
+                repl += match.group(16)
 
-          repl += '\n'
+            repl += '\n'
 
-          return repl
+            return repl
 
-        self.data.seek(0)
-        self.data.write(re.sub(From, repl, self.data.getvalue(), 1))
-        self.data.truncate()
+          self.data.seek(0)
+          self.data.write(re.sub(From, repl, self.data.getvalue(), 1))
+          self.data.truncate()
 
-        message.append(self)
+          message.append(self)
 
-        deferred.callback(None)
+          deferred.callback(None)
+
+        try:
+          sub(result[0][0])
+
+        except IndexError:
+          alphabet = '-0123456789_abcdefghijklmnopqrstuvwxyz'
+
+          letter = random()
+          sender = ''
+          for ignore in range(6):
+            letter *= len(alphabet)
+            sender += alphabet[int(letter)]
+            letter -= int(letter)
+
+          def insert():
+            conn = adbapi.Connection(pool)
+            trans = adbapi.Transaction(pool, conn)
+
+            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
+            trans.close()
+
+          def callback(result):
+            sub(sender)
+
+          threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
 
       threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
