@@ -353,9 +353,38 @@ class Message:
       threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
     else:
-      message.append(self)
+      def select():
+        conn = adbapi.Connection(pool)
+        trans = adbapi.Transaction(pool, conn)
 
-      deferred.callback(None)
+        trans.execute('SELECT COUNT(*) FROM address WHERE address <> %s AND sender = %s', (self.user.orig, self.user.dest.local))
+        result = trans.fetchall()
+        trans.close()
+
+        return result
+
+      def callback(result):
+        if result[0][0]:
+          def insert():
+            conn = adbapi.Connection(pool)
+            trans = adbapi.Transaction(pool, conn)
+
+            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user.orig, self.user.dest.local))
+            trans.close()
+
+          def callback(result):
+            message.append(self)
+
+            deferred.callback(None)
+
+          threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+
+        else:
+          message.append(self)
+
+          deferred.callback(None)
+
+      threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
     return self.deferred
 
