@@ -154,6 +154,8 @@ class Message:
 
     inReplyTo = 'In-Reply-To:(?:' + msgId + ')+' + CRLF
 
+    references = 'References:(?:' + msgId + ')+' + CRLF
+
     messageId = 'Message-ID:' + msgId + CRLF
 
     dayOfWeek = '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)'
@@ -357,30 +359,37 @@ class Message:
 
         threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
-      # TODO Support multiple message ids, regex currently supports only one
-      match = re.search(inReplyTo, self.data.getvalue())
-      if match:
-        def select():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
+      def messageId(pattern, fallback):
 
-          trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
-          result = trans.fetchall()
-          trans.close()
+        # TODO Support multiple message ids, regex currently supports only one
+        match = re.search(pattern, self.data.getvalue())
+        if match:
+          def select():
+            conn = adbapi.Connection(pool)
+            trans = adbapi.Transaction(pool, conn)
 
-          return result
+            trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
+            result = trans.fetchall()
+            trans.close()
 
-        def callback(result):
-          try:
-            sub(result[0][0])
+            return result
 
-          except IndexError:
-            address()
+          def callback(result):
+            try:
+              sub(result[0][0])
 
-        threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+            except IndexError:
+              fallback()
 
-      else:
-        address()
+          threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+        else:
+          fallback()
+
+      # Check first for existing address associated with In-Reply-To message
+      # id, then References message id, then recipient address, and finally
+      # generate new address
+      messageId(inReplyTo, lambda: messageId(references, address))
 
     else:
       match = re.search(messageId, self.data.getvalue())
