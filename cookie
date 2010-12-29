@@ -152,6 +152,8 @@ class Message:
     idRight = '(?:' + dotAtomText + '|' + noFoldLiteral + ')'
     msgId = '(?:' + CFWS + ')?<(' + idLeft + '@' + idRight + ')>(?:' + CFWS + ')?'
 
+    inReplyTo = 'In-Reply-To:(?:' + msgId + ')+' + CRLF
+
     messageId = 'Message-ID:' + msgId + CRLF
 
     dayOfWeek = '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)'
@@ -250,109 +252,135 @@ class Message:
     # No need to compile regex, most recent patterns are cached,
     # http://docs.python.org/library/re#re.compile
     if re.match(timeStampLine, self.data.getvalue()):
-      def select():
-        conn = adbapi.Connection(pool)
-        trans = adbapi.Transaction(pool, conn)
+      def sub(sender):
+        sender += '@nottheoilrig.com'
 
-        trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
-        result = trans.fetchall()
-        trans.close()
+        def repl(match):
+          repl = 'From:'
 
-        return result
+          # displayName
+          if match.group(1):
+            repl += match.group(1)
 
-      def callback(result):
-        def sub(sender):
-          sender += '@nottheoilrig.com'
+          # angleAddr
+          if match.group(3):
+            repl += match.group(3)
 
-          def repl(match):
-            repl = 'From:'
+            # localPart dotAtom
+            if match.group(4):
+              repl += match.group(4)
 
-            # displayName
-            if match.group(1):
-              repl += match.group(1)
+            # localPart quotedString
+            elif match.group(6):
+              repl += match.group(6)
 
-            # angleAddr
-            if match.group(3):
-              repl += match.group(3)
+            repl += sender
 
-              # localPart dotAtom
-              if match.group(4):
-                repl += match.group(4)
+            # domain dotAtom
+            if match.group(8):
+              repl += match.group(8)
 
-              # localPart quotedString
-              elif match.group(6):
-                repl += match.group(6)
+            # domain domainLiteral
+            elif match.group(9):
+              repl += match.group(9)
 
-              repl += sender
+            repl += match.group(10)
 
-              # domain dotAtom
-              if match.group(8):
-                repl += match.group(8)
+          else:
 
-              # domain domainLiteral
-              elif match.group(9):
-                repl += match.group(9)
+            # localPart dotAtom
+            if match.group(11):
+              repl += match.group(11)
 
-              repl += match.group(10)
+            # localPart quotedString
+            elif match.group(13):
+              repl += match.group(13)
 
-            else:
+            repl += sender
 
-              # localPart dotAtom
-              if match.group(11):
-                repl += match.group(11)
+            # domain dotAtom
+            if match.group(14):
+              repl += match.group(14)
 
-              # localPart quotedString
-              elif match.group(13):
-                repl += match.group(13)
+            # domain domainLiteral
+            elif match.group(16):
+              repl += match.group(16)
 
-              repl += sender
+          repl += '\n'
 
-              # domain dotAtom
-              if match.group(14):
-                repl += match.group(14)
+          return repl
 
-              # domain domainLiteral
-              elif match.group(16):
-                repl += match.group(16)
+        self.data.seek(0)
+        self.data.write(re.sub(From, repl, self.data.getvalue(), 1))
+        self.data.truncate()
 
-            repl += '\n'
+        message.append(self)
 
-            return repl
+        deferred.callback(None)
 
-          self.data.seek(0)
-          self.data.write(re.sub(From, repl, self.data.getvalue(), 1))
-          self.data.truncate()
+      def address():
+        def select():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
 
-          message.append(self)
+          trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
+          result = trans.fetchall()
+          trans.close()
 
-          deferred.callback(None)
+          return result
 
-        try:
-          sub(result[0][0])
+        def callback(result):
+          try:
+            sub(result[0][0])
 
-        except IndexError:
-          alphabet = '-0123456789_abcdefghijklmnopqrstuvwxyz'
+          except IndexError:
+            alphabet = '-0123456789_abcdefghijklmnopqrstuvwxyz'
 
-          letter = random()
-          sender = ''
-          for ignore in range(6):
-            letter *= len(alphabet)
-            sender += alphabet[int(letter)]
-            letter -= int(letter)
+            letter = random()
+            sender = ''
+            for ignore in range(6):
+              letter *= len(alphabet)
+              sender += alphabet[int(letter)]
+              letter -= int(letter)
 
-          def insert():
-            conn = adbapi.Connection(pool)
-            trans = adbapi.Transaction(pool, conn)
+            def insert():
+              conn = adbapi.Connection(pool)
+              trans = adbapi.Transaction(pool, conn)
 
-            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
-            trans.close()
+              trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
+              trans.close()
 
-          def callback(result):
-            sub(sender)
+            def callback(result):
+              sub(sender)
 
-          threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+            threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
 
-      threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+        threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+      # TODO Support multiple message ids, regex currently supports only one
+      match = re.search(inReplyTo, self.data.getvalue())
+      if match:
+        def select():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
+
+          trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
+          result = trans.fetchall()
+          trans.close()
+
+          return result
+
+        def callback(result):
+          try:
+            sub(result[0][0])
+
+          except IndexError:
+            address()
+
+        threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+      else:
+        address()
 
     else:
       match = re.search(messageId, self.data.getvalue())
