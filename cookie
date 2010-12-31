@@ -7,6 +7,7 @@ from twisted.application import internet, service
 from twisted.enterprise import adbapi
 from twisted.internet import defer, protocol, reactor, threads
 from twisted.mail import smtp
+from twisted.web import http
 
 application = service.Application('cookie')
 
@@ -17,7 +18,7 @@ message = []
 # Can't otherwise tell if client is running or disconnecting
 running = False
 
-class Client(smtp.ESMTPClient):
+class SMTPClient(smtp.ESMTPClient):
 
   # Shortcut ESMTPClient.__init__(), no authentication or TLS
   def __init__(self, *args, **kw):
@@ -75,9 +76,9 @@ class Client(smtp.ESMTPClient):
 # Cache our domain
 domain = socket.getfqdn()
 
-class ClientFactory(protocol.ClientFactory):
+class SMTPClientFactory(protocol.ClientFactory):
   domain = domain
-  protocol = Client
+  protocol = SMTPClient
 
   def buildProtocol(self, addr):
     return self.protocol(self.domain)
@@ -442,7 +443,7 @@ class NullMessage(Message):
   def lineReceived(self, line):
     pass
 
-class Server(smtp.ESMTP):
+class SMTPServer(smtp.ESMTP):
   def connectionMade(self):
     global clientService, running
 
@@ -451,7 +452,7 @@ class Server(smtp.ESMTP):
         clientService.startService()
 
       except NameError:
-        factory = ClientFactory()
+        factory = SMTPClientFactory()
 
         clientService = internet.TCPClient('localhost', 1894, factory)
         clientService.setServiceParent(application)
@@ -495,10 +496,66 @@ class Server(smtp.ESMTP):
     return lambda: message
 
 # ESMTPFactory doesn't exist
-class ServerFactory(smtp.SMTPFactory):
-  protocol = Server
+class SMTPServerFactory(smtp.SMTPFactory):
+  protocol = SMTPServer
 
-factory = ServerFactory()
+factory = SMTPServerFactory()
 
 serverService = internet.TCPServer(1438, factory, interface='localhost')
+serverService.setServiceParent(application)
+
+class Request(http.Request):
+  def process(self):
+    def select():
+      conn = adbapi.Connection(pool)
+      trans = adbapi.Transaction(pool, conn)
+
+      trans.execute('SELECT sender FROM address WHERE address = %s', self.path)
+      result = trans.fetchall()
+      trans.close()
+
+      return result
+
+    def callback(result):
+      try:
+        self.write(result[0][0])
+
+      except IndexError:
+        alphabet = '-0123456789_abcdefghijklmnopqrstuvwxyz'
+
+        letter = random()
+        sender = ''
+        for ignore in range(6):
+          letter *= len(alphabet)
+          sender += alphabet[int(letter)]
+          letter -= int(letter)
+
+        def insert():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
+
+          trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.path, sender))
+          trans.close()
+
+        def callback(result):
+          self.write(sender)
+
+          self.finish()
+
+        threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+
+      else:
+        self.finish()
+
+    threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+class HTTPServer(http.HTTPChannel):
+  requestFactory = Request
+
+class HTTPServerFactory(http.HTTPFactory):
+  protocol = HTTPServer
+
+factory = HTTPServerFactory()
+
+serverService = internet.TCPServer(8743, factory, interface='localhost')
 serverService.setServiceParent(application)
