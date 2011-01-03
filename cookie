@@ -506,7 +506,7 @@ serverService.setServiceParent(application)
 
 class Request(http.Request):
   def process(self):
-    if not re.match(addrSpec, self.path):
+    if not re.match('/' + addrSpec, self.path):
       self.setResponseCode(http.NOT_FOUND)
 
       self.finish()
@@ -516,7 +516,7 @@ class Request(http.Request):
         conn = adbapi.Connection(pool)
         trans = adbapi.Transaction(pool, conn)
 
-        trans.execute('SELECT sender FROM address WHERE address = %s', self.path)
+        trans.execute('SELECT sender FROM address WHERE address = %s', self.path[1:])
         result = trans.fetchall()
         trans.close()
 
@@ -540,7 +540,7 @@ class Request(http.Request):
             conn = adbapi.Connection(pool)
             trans = adbapi.Transaction(pool, conn)
 
-            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.path, sender))
+            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.path[1:], sender))
             trans.close()
 
           def callback(result):
