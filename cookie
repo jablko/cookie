@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import re, socket
+import re, rfc5321, rfc5322, socket
 from random import random
 from StringIO import StringIO
 from twisted.application import internet, service
@@ -83,168 +83,6 @@ class SMTPClientFactory(protocol.ClientFactory):
   def buildProtocol(self, addr):
     return self.protocol(self.domain)
 
-ALPHA = '[A-Za-z]'
-
-# Use local newlines
-CRLF = '\n'
-
-DIGIT = '\d'
-DQUOTE = '"'
-HEXDIG = '[0-9ABCDEF]'
-
-# Visible (printing) characters
-VCHAR = '[!-~]'
-
-# White space
-WSP = '[\t ]'
-
-# Folding white space
-FWS = '(?:(?:' + WSP + ')*' + CRLF + ')?(?:' + WSP + ')+'
-
-# Printable US-ASCII characters not including "(", ")", or "\"
-ctext = '[!-\'*-[\]-~]'
-
-quotedPair = '\\\(?:' + VCHAR + '|' + WSP + ')'
-
-# Recursive
-ccontent = '(?:' + ctext + '|' + quotedPair + ')'
-
-comment = '\((?:(?:' + FWS + ')?' + ccontent + ')*(?:' + FWS + ')?\)'
-CFWS = '(?:(?:(?:' + FWS + ')?' + comment + ')+(?:' + FWS + ')?|' + FWS + ')'
-
-# Printable US-ASCII characters not including specials.  Used for atoms
-atext = '(?:[!#$%&\'*+\-/=?^_`{|}~]|' + ALPHA + '|' + DIGIT + ')'
-
-atom = '(?:' + CFWS + ')?(?:' + atext + ')+(?:' + CFWS + ')?'
-
-# Printable US-ASCII characters not including "\" or the quote character
-qtext = '[!#-[\]-~]'
-
-qcontent = '(?:' + qtext + '|' + quotedPair + ')'
-quotedString = '(' + CFWS + ')?' + DQUOTE + '(?:(?:' + FWS + ')?' + qcontent + ')*(?:' + FWS + ')?' + DQUOTE + '(?:' + CFWS + ')?'
-word = '(?:' + atom + '|' + quotedString + ')'
-phrase = '(?:' + word + ')+'
-displayName = phrase
-dotAtomText = '(?:' + atext + ')+(?:\.(?:' + atext + ')+)*'
-dotAtom = '(' + CFWS + ')?' + dotAtomText + '(' + CFWS + ')?'
-localPart = '(?:' + dotAtom + '|' + quotedString + ')'
-
-# Printable US-ASCII characters not including "[", "]", or "\"
-dtext = '[!-Z^-~]'
-
-domainLiteral = '(?:' + CFWS + ')?\[(?:(?:' + FWS + ')?' + dtext + ')*(?:' + FWS + ')?](' + CFWS + ')?'
-domain = '(?:' + dotAtom + '|' + domainLiteral + ')'
-addrSpec = localPart + '@' + domain
-angleAddr = '((?:' + CFWS + ')?<)' + addrSpec + '(>(?:' + CFWS + ')?)'
-nameAddr = '(' + displayName + ')?' + angleAddr
-mailbox = '(?:' + nameAddr + '|' + addrSpec + ')'
-
-From = 'From:' + mailbox + CRLF
-
-idLeft = dotAtomText
-noFoldLiteral = '\[(?:' + dtext + ')*]'
-idRight = '(?:' + dotAtomText + '|' + noFoldLiteral + ')'
-msgId = '(?:' + CFWS + ')?<(' + idLeft + '@' + idRight + ')>(?:' + CFWS + ')?'
-
-inReplyTo = 'In-Reply-To:(?:' + msgId + ')+' + CRLF
-
-references = 'References:(?:' + msgId + ')+' + CRLF
-
-messageId = 'Message-ID:' + msgId + CRLF
-
-dayOfWeek = '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)'
-day = '(?:' + FWS + ')?(?:' + DIGIT + '){1,2}' + FWS
-month = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
-year = FWS + '(?:' + DIGIT + '){4,}' + FWS
-date = day + month + year
-hour = '(?:' + DIGIT + '){2}'
-minute = '(?:' + DIGIT + '){2}'
-second = '(?:' + DIGIT + '){2}'
-timeOfDay = hour + ':' + minute + '(?::' + second + ')?'
-zone = FWS + '[+-](?:' + DIGIT + '){4}'
-time = timeOfDay + zone
-dateTime = '(?:' + dayOfWeek + ',)?' + date + time + '(?:' + CFWS + ')?'
-
-# Representing a decimal integer value in the range 0 through 255
-snum = '(?:' + DIGIT + '){1,3}'
-
-ipv4AddressLiteral = snum + '(?:\.' + snum + '){3}'
-ipv6Hex = '(?:' + HEXDIG + '){1,4}'
-ipv6Full = ipv6Hex + '(?::' + ipv6Hex + '){7}'
-
-# The "::" represents at least 2 16-bit groups of zeros.  No more than 6
-# groups in addition to the "::" may be present
-ipv6Comp = '(?:' + ipv6Hex + '(?::' + ipv6Hex + '){,5})?::(?:' + ipv6Hex + '(?::' + ipv6Hex + '){,5})?'
-
-ipv6v4Full = ipv6Hex + '(?::' + ipv6Hex + '){5}:' + ipv4AddressLiteral
-
-# The "::" represents at least 2 16-bit groups of zeros.  No more than 4
-# groups in addition to the "::" and IPv4-address-literal may be present
-ipv6v4Comp = '(?:' + ipv6Hex + '(?::' + ipv6Hex + '){,3})?::(?:' + ipv6Hex + '(?::' + ipv6Hex + '){,3}:)?' + ipv4AddressLiteral
-
-ipv6Addr = '(?:' + ipv6Full + '|' + ipv6Comp + '|' + ipv6v4Full + '|' + ipv6v4Comp + ')'
-ipv6AddressLiteral = 'IPv6:' + ipv6Addr
-
-letDig = '(?:' + ALPHA + '|' + DIGIT + ')'
-ldhStr = '(?:' + ALPHA + '|' + DIGIT + '|-)*' + letDig
-
-# Standardized-tag MUST be specified in a Standards-Track RFC and
-# registered with IANA
-standardizedTag = ldhStr
-
-# Printable US-ASCII characters not including "[", "]", or "\"
-dcontent = '[!-Z^-~]'
-
-generalAddressLiteral = standardizedTag + ':' + '(?:' + dcontent + ')+'
-addressLiteral = '\[(?:' + ipv4AddressLiteral + '|' + ipv6AddressLiteral + '|' + generalAddressLiteral + ')]'
-
-subDomain = letDig + '(?:' + ldhStr + ')?'
-domain = subDomain + '(?:\.' + subDomain + ')*'
-
-# Information derived by server from TCP connection not client EHLO
-tcpInfo = '(?:' + addressLiteral + '|' + domain + FWS + addressLiteral + ')'
-
-extendedDomain = '(?:' + domain + '|' + domain + FWS + '\(' + tcpInfo + '\)|' + addressLiteral + FWS + '\(' + tcpInfo + '\))'
-fromDomain = 'from' + FWS + extendedDomain
-byDomain = CFWS + 'by' + FWS + extendedDomain
-atom = '(?:' + atext + ')+'
-addtlLink = atom
-link = '(?:TCP|' + addtlLink + ')'
-via = CFWS + 'via' + FWS + link
-
-# Upstream client authenticated,
-# http://thread.gmane.org/gmane.mail.postfix.user/215958
-protocol = 'ESMTPA'
-
-With = CFWS + 'with' + FWS + protocol
-id = CFWS + 'id' + FWS + '(?:' + atom + '|' + msgId + ')'
-atDomain = '@' + domain
-
-# Note that this form, the so-called "source route", MUST be accepted,
-# SHOULD NOT be generated, and SHOULD be ignored
-adl = atDomain + '(?:,' + atDomain + ')*'
-
-dotString = atom + '(?:\.' + atom + ')*'
-qtextSmtp = '[ !#-[\]-~]'
-quotedPairSmtp = '\\[ -~]'
-qcontentSmtp = '(?:' + qtextSmtp + '|' + quotedPairSmtp + ')'
-quotedString = DQUOTE + '(?:' + qcontentSmtp + ')*' + DQUOTE
-localPart = '(?:' + dotString + '|' + quotedString + ')'
-mailbox = localPart + '@(?:' + domain + '|' + addressLiteral + ')'
-path = '<(?:' + adl + ':)?' + mailbox + '>'
-For = CFWS + 'for' + FWS + '(?:' + path + '|' + mailbox + ')'
-string = '(?:' + atom + '|' + quotedString + ')'
-
-# Additional standard clauses may be added in this location by future
-# standards and registered with IANA.  SMTP servers SHOULD NOT use
-# unregistered names
-additionalRegisteredClauses = CFWS + atom + FWS + string
-
-optInfo = '(?:' + via + ')?(?:' + With + ')?(?:' + id + ')?(?:' + For + ')?(?:' + additionalRegisteredClauses + ')?'
-stamp = fromDomain + byDomain + optInfo + '(?:' + CFWS + ')?;' + FWS + dateTime
-
-timeStampLine = 'Received:' + FWS + stamp + CRLF
-
 pool = adbapi.ConnectionPool('MySQLdb', db='cookie', user='root')
 
 # Buffer lines to .data, call .deferred on delivery success or failure
@@ -254,7 +92,7 @@ class Message:
 
     # No need to compile regex, most recent patterns are cached,
     # http://docs.python.org/library/re#re.compile
-    if re.match(timeStampLine, self.data.getvalue()):
+    if re.match(rfc5321.timeStampLine, self.data.getvalue()):
       def sub(sender):
         sender += '@nottheoilrig.com'
 
@@ -314,14 +152,40 @@ class Message:
           return repl
 
         self.data.seek(0)
-        self.data.write(re.sub(From, repl, self.data.getvalue(), 1))
+        self.data.write(re.sub(rfc5322.From, repl, self.data.getvalue(), 1))
         self.data.truncate()
 
         message.append(self)
 
         deferred.callback(None)
 
-      def address():
+      def messageId(pattern):
+
+        # TODO Support multiple message ids, regex currently supports only one
+        match = re.search(pattern, self.data.getvalue())
+        if not match:
+          raise Exception
+
+        def select():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
+
+          trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
+          result = trans.fetchall()
+          trans.close()
+
+          return result
+
+        def callback(result):
+          try:
+            sub(result[0][0])
+
+          except IndexError:
+            raise Exception
+
+        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+      def address(result):
         def select():
           conn = adbapi.Connection(pool)
           trans = adbapi.Transaction(pool, conn)
@@ -358,42 +222,15 @@ class Message:
 
             threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
 
-        threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
-
-      def messageId(pattern, fallback):
-
-        # TODO Support multiple message ids, regex currently supports only one
-        match = re.search(pattern, self.data.getvalue())
-        if match:
-          def select():
-            conn = adbapi.Connection(pool)
-            trans = adbapi.Transaction(pool, conn)
-
-            trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
-            result = trans.fetchall()
-            trans.close()
-
-            return result
-
-          def callback(result):
-            try:
-              sub(result[0][0])
-
-            except IndexError:
-              fallback()
-
-          threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
-
-        else:
-          fallback()
+        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
       # Check first for existing address associated with In-Reply-To message
       # id, then References message id, then recipient address, and finally
       # generate new address
-      messageId(inReplyTo, lambda: messageId(references, address))
+      defer.maybeDeferred(lambda: messageId(rfc5322.inReplyTo)).addErrback(lambda result: messageId(rfc5322.references)).addErrback(address)
 
     else:
-      match = re.search(messageId, self.data.getvalue())
+      match = re.search(rfc5322.messageId, self.data.getvalue())
       if match:
         def select():
           conn = adbapi.Connection(pool)
@@ -506,7 +343,7 @@ serverService.setServiceParent(application)
 
 class Request(http.Request):
   def process(self):
-    if not re.match('/' + addrSpec, self.path):
+    if not re.match('/' + rfc5322.addrSpec, self.path):
       self.setResponseCode(http.NOT_FOUND)
 
       self.finish()
