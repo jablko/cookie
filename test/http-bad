@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+
+from twisted.application import internet, service
+from twisted.enterprise import adbapi
+from twisted.internet import protocol, reactor, threads
+from twisted.web import http
+
+def equal(actual, expected):
+  print 'PASS' if expected == actual else 'FAIL "%s" "%s"' % (actual, expected)
+
+application = service.Application('test')
+
+pool = adbapi.ConnectionPool('MySQLdb', db='cookie', user='root')
+
+def delete():
+  conn = adbapi.Connection(pool)
+  trans = adbapi.Transaction(pool, conn)
+
+  trans.execute('DELETE FROM address')
+  trans.close()
+
+def callback(result):
+  class Client(http.HTTPClient):
+    def connectionMade(self):
+      self.sendCommand('GET', '/notAddrSpec')
+
+      self.endHeaders()
+
+    def handleResponse(self, response):
+      pass
+
+    def handleStatus(self, version, status, message):
+      equal(status, '404')
+
+  class ClientFactory(protocol.ClientFactory):
+    protocol = Client
+
+  factory = ClientFactory()
+
+  service = internet.TCPClient('localhost', 8743, factory)
+  service.setServiceParent(application)
+
+  def timeout():
+    def select():
+      conn = adbapi.Connection(pool)
+      trans = adbapi.Transaction(pool, conn)
+
+      trans.execute('SELECT sender FROM address WHERE address = %s', 'notAddrSpec')
+      result = trans.fetchall()
+      trans.close()
+
+      return result
+
+    def callback(result):
+      equal(result, ())
+
+      reactor.stop()
+
+    threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+  reactor.callLater(2, timeout)
+
+threads.deferToThreadPool(reactor, pool.threadpool, delete).addCallback(callback)
