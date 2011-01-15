@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 
 import re
+from mail.test import equal
 from StringIO import StringIO
 from twisted.application import internet, service
 from twisted.enterprise import adbapi
 from twisted.internet import defer, protocol, reactor, threads
 from twisted.mail import smtp
-
-def equal(actual, expected):
-  print 'PASS' if expected == actual else 'FAIL "%s" "%s"' % (actual, expected)
 
 def match(actual, expected):
   match = re.match(expected, actual)
