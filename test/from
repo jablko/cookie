@@ -47,22 +47,10 @@ la di da
     def do_UNKNOWN(self, rest):
       raise
 
-    def do_XFORWARD(self, rest):
-      global xforward
-
-      xforward = rest
-
-      self.sendCode(250, 'Ok')
-
-    def extensions(self):
-      return { 'XFORWARD': ['NAME', 'ADDR', 'PORT', 'HELO', 'PROTO', 'SOURCE'] }
-
     def receivedHeader(self, helo, origin, recipients):
       pass
 
     def validateFrom(self, helo, origin):
-      equal(xforward, 'NAME=localhost ADDR=127.0.0.1 PORT=47831 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')
-
       equal(str(origin), 'alice@example.com')
 
       return origin
@@ -87,12 +75,6 @@ la di da
 
       return smtp.SMTPClient.__init__(self, *args, **kw)
 
-    def esmtpState_serverConfig(self, code, resp):
-      equal(resp, '''selene Hello 127.0.0.1, nice to meet you
-XFORWARD NAME ADDR PORT HELO PROTO SOURCE''')
-
-      return smtp.ESMTPClient.esmtpState_serverConfig(self, code, resp)
-
     def getMailData(self):
       return message[0]['data']
 
@@ -101,11 +83,6 @@ XFORWARD NAME ADDR PORT HELO PROTO SOURCE''')
 
     def getMailTo(self):
       return message[0]['to']
-
-    def smtpState_from(self, code, resp):
-      self.sendLine('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=47831 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')
-      self._expected = xrange(0, 1000)
-      self._okresponse = lambda code, resp: smtp.ESMTPClient.smtpState_from(self, code, resp)
 
     def smtpState_msgSent(self, code, resp):
       global message
