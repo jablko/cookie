@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
-import re, rfc5321, rfc5322, socket
+import re, rfc5321, rfc5322, socket, sys
 from random import random
 from StringIO import StringIO
-from twisted.application import internet, service
 from twisted.enterprise import adbapi
 from twisted.internet import defer, protocol, reactor, threads
 from twisted.mail import smtp
+from twisted.python import log
 from twisted.web import http
 
-application = service.Application('cookie')
+log.startLogging(sys.stdout)
 
 ehlo = defer.Deferred()
 
@@ -164,7 +164,7 @@ class Message:
         # TODO Support multiple message ids, regex currently supports only one
         match = re.search(pattern, self.data.getvalue())
         if not match:
-          raise Exception
+          raise
 
         def select():
           conn = adbapi.Connection(pool)
@@ -181,7 +181,7 @@ class Message:
             sub(result[0][0])
 
           except IndexError:
-            raise Exception
+            raise
 
         return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
 
@@ -282,17 +282,11 @@ class NullMessage(Message):
 
 class SMTPServer(smtp.ESMTP):
   def connectionMade(self):
-    global clientService, running
+    global running
 
     if not running:
-      try:
-        clientService.startService()
-
-      except NameError:
-        factory = SMTPClientFactory()
-
-        clientService = internet.TCPClient('localhost', 1894, factory)
-        clientService.setServiceParent(application)
+      factory = SMTPClientFactory()
+      reactor.connectTCP('localhost', 1894, factory)
 
       running = True
 
@@ -337,9 +331,7 @@ class SMTPServerFactory(smtp.SMTPFactory):
   protocol = SMTPServer
 
 factory = SMTPServerFactory()
-
-serverService = internet.TCPServer(1438, factory, interface='localhost')
-serverService.setServiceParent(application)
+reactor.listenTCP(1438, factory, interface='localhost')
 
 class Request(http.Request):
   def process(self):
@@ -399,6 +391,6 @@ class HTTPServerFactory(http.HTTPFactory):
   protocol = HTTPServer
 
 factory = HTTPServerFactory()
+reactor.listenTCP(8743, factory, interface='localhost')
 
-serverService = internet.TCPServer(8743, factory, interface='localhost')
-serverService.setServiceParent(application)
+reactor.run()
