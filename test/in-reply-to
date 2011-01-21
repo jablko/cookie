@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
-from mail.test import equal, ok
+from mail.test import equal, expect, ok
 from StringIO import StringIO
 from twisted.enterprise import adbapi
 from twisted.internet import defer, protocol, reactor, threads
 from twisted.mail import smtp
+
+expect(3)
 
 def insert():
   conn = adbapi.Connection(pool)
@@ -16,7 +18,7 @@ def insert():
 message = [{
   'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
   by example.com (Postfix) with ESMTPA
-  for <bob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
+  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
 From: notalice@example.com
 In-Reply-To: <1234567890@example.com>
 
@@ -33,7 +35,7 @@ def callback(result):
     def eomReceived(self):
       equal("\n".join(self.data) + "\n", '''Received: from example.com (localhost [127.0.0.1])
   by example.com (Postfix) with ESMTPA
-  for <bob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
+  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
 From: abc123@nottheoilrig.com
 In-Reply-To: <1234567890@example.com>
 
@@ -53,7 +55,7 @@ la di da
       pass
 
     def validateFrom(self, helo, origin):
-      equal(str(origin), 'alice@example.com')
+      equal(str(origin), 'abc123@nottheoilrig.com')
 
       return origin
 

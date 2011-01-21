@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
-from mail.test import equal, ok
+from mail.test import equal, expect, ok
 from twisted.enterprise import adbapi
 from twisted.internet import protocol, reactor, threads
 from twisted.web import http
+
+expect(1)
 
 def insert():
   conn = adbapi.Connection(pool)

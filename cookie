@@ -93,8 +93,75 @@ class Message:
     # No need to compile regex, most recent patterns are cached,
     # http://docs.python.org/library/re#re.compile
     if re.match(rfc5321.timeStampLine, self.data.getvalue()):
-      def sub(sender):
-        sender += '@nottheoilrig.com'
+      def messageId(pattern):
+
+        # TODO Support multiple message ids, regex currently supports only one
+        match = re.search(pattern, self.data.getvalue())
+        if not match:
+          raise
+
+        def select():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
+
+          trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
+          result = trans.fetchall()
+          trans.close()
+
+          return result
+
+        def callback(result):
+          try:
+            return result[0][0]
+
+          except IndexError:
+            raise
+
+        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+      def address(result):
+        def select():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
+
+          trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
+          result = trans.fetchall()
+          trans.close()
+
+          return result
+
+        def callback(result):
+          try:
+            return result[0][0]
+
+          except IndexError:
+            alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+
+            # Choose six letters from alphabet, at random
+            letter = random()
+            sender = ''
+            for ignore in range(6):
+              letter *= len(alphabet)
+              sender += alphabet[int(letter)]
+              letter -= int(letter)
+
+            def insert():
+              conn = adbapi.Connection(pool)
+              trans = adbapi.Transaction(pool, conn)
+
+              trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
+              trans.close()
+
+            def callback(result):
+              return sender
+
+            return threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+
+        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+
+      def callback(result):
+        self.user.orig.local = result
+        self.user.orig.domain = 'nottheoilrig.com'
 
         def repl(match):
           repl = 'From:'
@@ -115,7 +182,7 @@ class Message:
             elif match.group(6):
               repl += match.group(6)
 
-            repl += sender
+            repl += str(self.user.orig)
 
             # domain dotAtom
             if match.group(8):
@@ -137,7 +204,7 @@ class Message:
             elif match.group(13):
               repl += match.group(13)
 
-            repl += sender
+            repl += str(self.user.orig)
 
             # domain dotAtom
             if match.group(14):
@@ -159,75 +226,10 @@ class Message:
 
         deferred.callback(None)
 
-      def messageId(pattern):
-
-        # TODO Support multiple message ids, regex currently supports only one
-        match = re.search(pattern, self.data.getvalue())
-        if not match:
-          raise
-
-        def select():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
-
-          trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
-          result = trans.fetchall()
-          trans.close()
-
-          return result
-
-        def callback(result):
-          try:
-            sub(result[0][0])
-
-          except IndexError:
-            raise
-
-        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
-
-      def address(result):
-        def select():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
-
-          trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
-          result = trans.fetchall()
-          trans.close()
-
-          return result
-
-        def callback(result):
-          try:
-            sub(result[0][0])
-
-          except IndexError:
-            alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
-
-            letter = random()
-            sender = ''
-            for ignore in range(6):
-              letter *= len(alphabet)
-              sender += alphabet[int(letter)]
-              letter -= int(letter)
-
-            def insert():
-              conn = adbapi.Connection(pool)
-              trans = adbapi.Transaction(pool, conn)
-
-              trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
-              trans.close()
-
-            def callback(result):
-              sub(sender)
-
-            threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
-
-        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
-
       # Check first for existing address associated with In-Reply-To message
       # id, then References message id, then recipient address, and finally
       # generate new address
-      defer.maybeDeferred(lambda: messageId(rfc5322.inReplyTo)).addErrback(lambda result: messageId(rfc5322.references)).addErrback(address)
+      defer.maybeDeferred(lambda: messageId(rfc5322.inReplyTo)).addErrback(lambda result: messageId(rfc5322.references)).addErrback(address).addCallback(callback)
 
     else:
       match = re.search(rfc5322.messageId, self.data.getvalue())
@@ -292,6 +294,7 @@ class SMTPServer(smtp.ESMTP):
 
     return smtp.ESMTP.connectionMade(self)
 
+  # Override ESMTP.do_EHLO() to supress sendCode() until client replies
   def do_EHLO(self, rest):
     peer = self.transport.getPeer().host
     self._helo = (rest, peer)
@@ -316,6 +319,7 @@ class SMTPServer(smtp.ESMTP):
 
     return origin
 
+  # Don't yet know if we're sending (ESMTPA) or receiving (ESMTP)
   def validateTo(self, user):
     message = self.message
     message.data = self.data
@@ -358,6 +362,7 @@ class Request(http.Request):
         except IndexError:
           alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
+          # Choose six letters from alphabet, at random
           letter = random()
           sender = ''
           for ignore in range(6):
