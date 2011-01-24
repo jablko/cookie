@@ -8,36 +8,51 @@ from twisted.internet import reactor
 expect(6)
 
 factory = test.ServerFactory()
-factory.expect = [[{
+
+protocol = test.Server()
+protocol.expect = [{
   'data': '''
 da di la
 ''',
   'from': 'carol@example.com',
-  'to': ['dave@example.com'] }], [{
+  'to': ['dave@example.com'] }]
+
+factory.protocol.append(protocol)
+
+protocol = test.Server()
+protocol.expect = [{
   'data': '''
 la di da
 ''',
   'from': 'alice@example.com',
-  'to': ['bob@example.com'] }]]
+  'to': ['bob@example.com'] }]
+
+factory.protocol.append(protocol)
 
 reactor.listenTCP(1894, factory)
 
 factory = test.ClientFactory()
-factory.message = [{
+
+protocol = test.Client()
+protocol.message = [{
   'data': StringIO('''
 la di da
 '''),
   'from': 'alice@example.com',
   'to': ['bob@example.com'] }]
 
+factory.protocol.append(protocol)
+
 reactor.connectTCP('localhost', 1438, factory)
 
-factory = test.ClientFactory()
-factory.message = [{
+protocol = test.Client()
+protocol.message = [{
   'data': StringIO('''
 da di la
 '''),
   'from': 'carol@example.com',
   'to': ['dave@example.com'] }]
+
+factory.protocol.append(protocol)
 
 reactor.connectTCP('localhost', 1438, factory)

@@ -7,6 +7,21 @@ from twisted.web import http
 
 expect(1)
 
+class Client(http.HTTPClient):
+  def connectionMade(self):
+    self.sendCommand('GET', '/bob@example.com')
+
+    self.endHeaders()
+
+  def handleResponse(self, response):
+    equal('abc123', response)
+
+class ClientFactory(protocol.ClientFactory):
+  protocol = []
+
+  def buildProtocol(self, addr):
+    return self.protocol.pop(0)
+
 def insert():
   conn = adbapi.Connection(pool)
   trans = adbapi.Transaction(pool, conn)
@@ -15,19 +30,11 @@ def insert():
   trans.close()
 
 def callback(result):
-  class Client(http.HTTPClient):
-    def connectionMade(self):
-      self.sendCommand('GET', '/bob@example.com')
-
-      self.endHeaders()
-
-    def handleResponse(self, response):
-      equal('abc123', response)
-
-  class ClientFactory(protocol.ClientFactory):
-    protocol = Client
-
   factory = ClientFactory()
+
+  protocol = Client()
+  factory.protocol.append(protocol)
+
   reactor.connectTCP('localhost', 8743, factory)
 
 threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)

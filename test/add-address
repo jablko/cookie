@@ -32,20 +32,23 @@ class Server(test.Server):
     test.Server.validateTo(self, user)
 
     message = Message()
-    message.expect = self.expect
+    message.item = self.item
 
     return lambda: message
 
-class ServerFactory(test.ServerFactory):
-  protocol = Server
+factory = test.ServerFactory()
 
-factory = ServerFactory()
-factory.expect = [[{ 'to': ['bob@example.com'] }]]
+protocol = Server()
+protocol.expect = [{ 'to': ['bob@example.com'] }]
+
+factory.protocol.append(protocol)
 
 reactor.listenTCP(1894, factory)
 
 factory = test.ClientFactory()
-factory.message = [{
+
+protocol = test.Client()
+protocol.message = [{
   'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
   by example.com (Postfix) with ESMTPA
   for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
@@ -55,6 +58,8 @@ la di da
 '''),
   'from': 'alice@example.com',
   'to': ['bob@example.com'] }]
+
+factory.protocol.append(protocol)
 
 reactor.connectTCP('localhost', 1438, factory)
 

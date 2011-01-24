@@ -23,10 +23,11 @@ class Server(test.Server):
 
     return test.Server.validateFrom(self, helo, origin)
 
-class ServerFactory(test.ServerFactory):
-  protocol = Server
+factory = test.ServerFactory()
 
-factory = ServerFactory()
+protocol = Server()
+factory.protocol.append(protocol)
+
 reactor.listenTCP(1894, factory)
 
 class Client(test.Client):
@@ -41,11 +42,10 @@ XFORWARD NAME ADDR PORT HELO PROTO SOURCE''')
     self._expected = xrange(0, 1000)
     self._okresponse = lambda code, resp: test.Client.smtpState_from(self, code, resp)
 
-class ClientFactory(test.ClientFactory):
-  protocol = Client
+factory = test.ClientFactory()
 
-factory = ClientFactory()
-factory.message = [{
+protocol = Client()
+protocol.message = [{
   'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
   by example.com (Postfix) with ESMTPA
   for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
@@ -55,5 +55,7 @@ la di da
 '''),
   'from': 'alice@example.com',
   'to': ['bob@example.com'] }]
+
+factory.protocol.append(protocol)
 
 reactor.connectTCP('localhost', 1438, factory)

@@ -90,25 +90,25 @@ class SMTPClient(smtp.ESMTPClient):
     return smtp.ESMTPClient.esmtpState_serverConfig(self, *args, **kw)
 
   def getMailData(self):
-    self.message.data.seek(0)
+    self.item.data.seek(0)
 
-    return self.message.data
+    return self.item.data
 
   def getMailFrom(self):
-    return self.message.user.orig
+    return self.item.user.orig
 
   def getMailTo(self):
-    return [str(self.message.user)]
+    return [str(self.item.user)]
 
   # Wait for message from client
   @coroutine
   def smtpState_from(self, code, resp):
-    self.message = yield self.factory.message.shift()
+    self.item = yield self.factory.message.shift()
 
     smtp.ESMTPClient.smtpState_from(self, code, resp)
 
   def smtpState_msgSent(self, code, resp):
-    self.message.deferred.callback(None)
+    self.item.deferred.callback(None)
 
     self._from = None
     self.toAddressesResult = []
@@ -333,19 +333,19 @@ class SMTPServer(smtp.ESMTP):
   # Message for first recipient
   def validateFrom(self, helo, origin):
     self.data = StringIO()
-    self.message = Message()
+    self.item = Message()
 
     return origin
 
   # Don't yet know if we're sending (ESMTPA) or receiving (ESMTP)
   def validateTo(self, user):
-    message = self.message
+    message = self.item
     message.data = self.data
     message.factory = self.factory
     message.user = user
 
     # NullMessage for subsequent recipients
-    self.message = NullMessage()
+    self.item = NullMessage()
 
     return lambda: message
 

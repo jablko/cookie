@@ -17,7 +17,9 @@ def insert():
 
 def callback(result):
   factory = test.ServerFactory()
-  factory.expect = [[{
+
+  protocol = test.Server()
+  protocol.expect = [{
     'data': '''Received: from example.com (localhost [127.0.0.1])
   by example.com (Postfix) with ESMTPA
   for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
@@ -27,12 +29,16 @@ References: <1234567890@example.com>
 la di da
 ''',
     'from': 'abc123@nottheoilrig.com',
-    'to': ['bob@example.com'] }]]
+    'to': ['bob@example.com'] }]
+
+  factory.protocol.append(protocol)
 
   reactor.listenTCP(1894, factory)
 
   factory = test.ClientFactory()
-  factory.message = [{
+
+  protocol = test.Client()
+  protocol.message = [{
     'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
   by example.com (Postfix) with ESMTPA
   for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
@@ -43,6 +49,8 @@ la di da
 '''),
     'from': 'alice@example.com',
     'to': ['bob@example.com'] }]
+
+  factory.protocol.append(protocol)
 
   reactor.connectTCP('localhost', 1438, factory)
 
