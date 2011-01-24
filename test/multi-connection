@@ -2,17 +2,18 @@
 
 from mail.test import equal, expect, ok
 from StringIO import StringIO
-from twisted.enterprise import adbapi
-from twisted.internet import defer, protocol, reactor, threads
+from twisted.internet import defer, protocol, reactor
 from twisted.mail import smtp
 
-expect(2)
+expect(6)
 
 class Message:
   def __init__(self):
     self.data = []
 
   def eomReceived(self):
+    equal("\n".join(self.data) + "\n", self.expect['data'])
+
     return defer.succeed(None)
 
   def lineReceived(self, line):
@@ -22,32 +23,47 @@ class Server(smtp.ESMTP):
   def do_UNKNOWN(self, rest):
     raise
 
-  def do_XFORWARD(self, rest):
-    global xforward
-
-    xforward = rest
-
-    self.sendCode(250, 'Ok')
-
-  def extensions(self):
-    return { 'XFORWARD': ['NAME', 'ADDR', 'PORT', 'HELO', 'PROTO', 'SOURCE'] }
-
   def receivedHeader(self, helo, origin, recipients):
     pass
 
   def validateFrom(self, helo, origin):
-    equal(xforward, 'NAME=localhost ADDR=127.0.0.1 PORT=47831 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')
+    self.expect = self.expect.pop(0)
+
+    equal(str(origin), self.expect['from'])
 
     return origin
 
   def validateTo(self, user):
-    return Message
+    equal(str(user), self.expect['to'].pop(0))
+
+    message = Message()
+    message.expect = self.expect
+
+    return lambda: message
 
 # ESMTPFactory doesn't exist
 class ServerFactory(smtp.SMTPFactory):
   protocol = Server
 
+  def buildProtocol(self, addr):
+    protocol = smtp.SMTPFactory.buildProtocol(self, addr)
+    protocol.expect = self.expect.pop(0)
+
+    return protocol
+
 factory = ServerFactory()
+factory.expect = [[{
+  'data': '''
+da di la
+''',
+  'from': 'carol@example.com',
+  'to': ['dave@example.com'] }], [{
+  'data': '''
+la di da
+''',
+  'from': 'alice@example.com',
+  'to': ['bob@example.com'] }]]
+
 reactor.listenTCP(1894, factory)
 
 class Client(smtp.ESMTPClient):
@@ -57,12 +73,6 @@ class Client(smtp.ESMTPClient):
     self.secret = None
 
     return smtp.SMTPClient.__init__(self, 'example.com', *args, **kw)
-
-  def esmtpState_serverConfig(self, code, resp):
-    equal(resp, '''selene Hello 127.0.0.1, nice to meet you
-XFORWARD NAME ADDR PORT HELO PROTO SOURCE''')
-
-    return smtp.ESMTPClient.esmtpState_serverConfig(self, code, resp)
 
   def getMailData(self):
     return self.message['data']
@@ -76,9 +86,7 @@ XFORWARD NAME ADDR PORT HELO PROTO SOURCE''')
   def smtpState_from(self, code, resp):
     self.message = self.factory.message.pop(0)
 
-    self.sendLine('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=47831 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')
-    self._expected = xrange(0, 1000)
-    self._okresponse = lambda code, resp: smtp.ESMTPClient.smtpState_from(self, code, resp)
+    return smtp.ESMTPClient.smtpState_from(self, code, resp)
 
   def smtpState_msgSent(self, code, resp):
     if self.factory.message:
@@ -95,14 +103,20 @@ class ClientFactory(protocol.ClientFactory):
 
 factory = ClientFactory()
 factory.message = [{
-  'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
-  by example.com (Postfix) with ESMTPA
-  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
-From: notalice@example.com
-
+  'data': StringIO('''
 la di da
 '''),
   'from': 'alice@example.com',
   'to': ['bob@example.com'] }]
+
+reactor.connectTCP('localhost', 1438, factory)
+
+factory = ClientFactory()
+factory.message = [{
+  'data': StringIO('''
+da di la
+'''),
+  'from': 'carol@example.com',
+  'to': ['dave@example.com'] }]
 
 reactor.connectTCP('localhost', 1438, factory)

@@ -1,22 +1,76 @@
 #!/usr/bin/env python
 
-import re, rfc5321, rfc5322, socket, sys
+import functools, re, rfc5321, rfc5322, socket, sys
 from random import random
 from StringIO import StringIO
 from twisted.enterprise import adbapi
 from twisted.internet import defer, protocol, reactor, threads
 from twisted.mail import smtp
-from twisted.python import log
+from twisted.python import failure, log
 from twisted.web import http
 
 log.startLogging(sys.stdout)
 
+def coroutine(function):
+  def wrapper(*args, **kw):
+    generator = function(*args, **kw)
+
+    # TODO Tail call elimination
+    def callback(result):
+      try:
+
+        # .addBoth() so as not to errback exceptions in callback to callback
+        return (generator.throw(result.type, result.value, result.tb) if isinstance(result, failure.Failure) else generator.send(result)).addBoth(callback)
+
+      except StopIteration, e:
+        try:
+          return e.args[0]
+
+        except IndexError:
+          pass
+
+    try:
+
+      # .addBoth() so as not to errback exceptions in callback to callback
+      return generator.next().addBoth(callback)
+
+    except StopIteration, e:
+      try:
+        return e.args[0]
+
+      except IndexError:
+        pass
+
+  return functools.update_wrapper(wrapper, function)
+
+class Queue:
+  def __init__(self):
+    self.deferred = []
+    self.item = []
+
+  def push(self, item):
+    try:
+      self.deferred.pop(0).callback(item)
+
+    except IndexError:
+      self.item.append(item)
+
+    return self
+
+  def shift(self):
+    try:
+      return defer.succeed(self.item.pop(0))
+
+    except IndexError:
+      deferred = defer.Deferred()
+      self.deferred.append(deferred)
+
+      return deferred
+
+# Cache our domain
+domain = socket.getfqdn()
+
 ehlo = defer.Deferred()
-
-message = []
-
-# Can't otherwise tell if client is running or disconnecting
-running = False
 
 class SMTPClient(smtp.ESMTPClient):
 
@@ -24,7 +78,7 @@ class SMTPClient(smtp.ESMTPClient):
   def __init__(self, *args, **kw):
     self.secret = None
 
-    return smtp.SMTPClient.__init__(self, *args, **kw)
+    return smtp.SMTPClient.__init__(self, domain, *args, **kw)
 
   def esmtpState_serverConfig(self, *args, **kw):
     try:
@@ -36,52 +90,33 @@ class SMTPClient(smtp.ESMTPClient):
     return smtp.ESMTPClient.esmtpState_serverConfig(self, *args, **kw)
 
   def getMailData(self):
-    message[0].data.seek(0)
+    self.message.data.seek(0)
 
-    return message[0].data
+    return self.message.data
 
   def getMailFrom(self):
-    return message[0].user.orig
+    return self.message.user.orig
 
   def getMailTo(self):
-    return [str(message[0].user)]
+    return [str(self.message.user)]
 
   # Wait for message from client
+  @coroutine
   def smtpState_from(self, code, resp):
-    global deferred
+    self.message = yield self.factory.message.shift()
 
-    if message:
-      return smtp.ESMTPClient.smtpState_from(self, code, resp)
-
-    deferred = defer.Deferred()
-    deferred.addCallback(lambda result: smtp.ESMTPClient.smtpState_from(self, code, resp))
+    smtp.ESMTPClient.smtpState_from(self, code, resp)
 
   def smtpState_msgSent(self, code, resp):
-    global message, running
+    self.message.deferred.callback(None)
 
-    message[0].deferred.callback(None)
+    self._from = None
+    self.toAddressesResult = []
 
-    message = message[1:]
-    if message:
-      self._from = None
-      self.toAddressesResult = []
-
-      return smtp.ESMTPClient.smtpState_msgSent(self, code, resp)
-
-    # No more messages to send
-    running = False
-
-    self._disconnectFromServer()
-
-# Cache our domain
-domain = socket.getfqdn()
+    return self.smtpState_from(code, resp)
 
 class SMTPClientFactory(protocol.ClientFactory):
-  domain = domain
   protocol = SMTPClient
-
-  def buildProtocol(self, addr):
-    return self.protocol(self.domain)
 
 pool = adbapi.ConnectionPool('MySQLdb', db='cookie', user='root')
 
@@ -90,77 +125,84 @@ class Message:
   def eomReceived(self):
     self.deferred = defer.Deferred()
 
-    # No need to compile regex, most recent patterns are cached,
-    # http://docs.python.org/library/re#re.compile
-    if re.match(rfc5321.timeStampLine, self.data.getvalue()):
-      def messageId(pattern):
+    @coroutine
+    def filter():
 
-        # TODO Support multiple message ids, regex currently supports only one
-        match = re.search(pattern, self.data.getvalue())
-        if not match:
-          raise
+      # No need to compile regex, most recent patterns are cached,
+      # http://docs.python.org/library/re#re.compile
+      if re.match(rfc5321.timeStampLine, self.data.getvalue()):
 
-        def select():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
+        @coroutine
+        def messageId(pattern):
 
-          trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
-          result = trans.fetchall()
-          trans.close()
+          # TODO Support multiple message ids, regex currently supports only one
+          match = re.search(pattern, self.data.getvalue())
+          if not match:
+            raise
 
-          return result
+          def select():
+            conn = adbapi.Connection(pool)
+            trans = adbapi.Transaction(pool, conn)
 
-        def callback(result):
+            trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
+            result = trans.fetchall()
+            trans.close()
+
+            return result
+
+          result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
+
           try:
-            return result[0][0]
+            #return result[0][0]
+            raise StopIteration(result[0][0])
 
           except IndexError:
             raise
 
-        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+        try:
+          sender = yield messageId(rfc5322.inReplyTo)
 
-      def address(result):
-        def select():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
-
-          trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
-          result = trans.fetchall()
-          trans.close()
-
-          return result
-
-        def callback(result):
+        except:
           try:
-            return result[0][0]
+            sender = yield messageId(rfc5322.references)
 
-          except IndexError:
-            alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
-
-            # Choose six letters from alphabet, at random
-            letter = random()
-            sender = ''
-            for ignore in range(6):
-              letter *= len(alphabet)
-              sender += alphabet[int(letter)]
-              letter -= int(letter)
-
-            def insert():
+          except:
+            def select():
               conn = adbapi.Connection(pool)
               trans = adbapi.Transaction(pool, conn)
 
-              trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
+              trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
+              result = trans.fetchall()
               trans.close()
 
-            def callback(result):
-              return sender
+              return result
 
-            return threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+            result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
 
-        return threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+            try:
+              sender = result[0][0]
 
-      def callback(result):
-        self.user.orig.local = result
+            except IndexError:
+              alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+
+              # Choose six letters from alphabet, at random
+              letter = random()
+              sender = ''
+              for ignore in range(6):
+                letter *= len(alphabet)
+                sender += alphabet[int(letter)]
+                letter -= int(letter)
+
+              def insert():
+                conn = adbapi.Connection(pool)
+                trans = adbapi.Transaction(pool, conn)
+
+                trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
+                trans.close()
+
+              yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
+
+        self.user.orig.local = sender
         self.user.orig.domain = 'nottheoilrig.com'
 
         def repl(match):
@@ -222,29 +264,22 @@ class Message:
         self.data.write(re.sub(rfc5322.From, repl, self.data.getvalue(), 1))
         self.data.truncate()
 
-        message.append(self)
+        self.factory.message.push(self)
 
-        deferred.callback(None)
+      else:
+        match = re.search(rfc5322.messageId, self.data.getvalue())
+        if match:
+          def select():
+            conn = adbapi.Connection(pool)
+            trans = adbapi.Transaction(pool, conn)
 
-      # Check first for existing address associated with In-Reply-To message
-      # id, then References message id, then recipient address, and finally
-      # generate new address
-      defer.maybeDeferred(lambda: messageId(rfc5322.inReplyTo)).addErrback(lambda result: messageId(rfc5322.references)).addErrback(address).addCallback(callback)
+            trans.execute('SELECT COUNT(*) FROM address WHERE sender = %s', self.user.dest.local)
+            result = trans.fetchall()
+            trans.close()
 
-    else:
-      match = re.search(rfc5322.messageId, self.data.getvalue())
-      if match:
-        def select():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
+            return result
 
-          trans.execute('SELECT COUNT(*) FROM address WHERE sender = %s', self.user.dest.local)
-          result = trans.fetchall()
-          trans.close()
-
-          return result
-
-        def callback(result):
+          result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
           if result[0][0]:
             def insert():
               conn = adbapi.Connection(pool)
@@ -253,24 +288,17 @@ class Message:
               trans.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (match.group(1), self.user.dest.local))
               trans.close()
 
-            def callback(result):
-              message.append(self)
+            yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
 
-              deferred.callback(None)
-
-            threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+            self.factory.message.push(self)
 
           else:
-            message.append(self)
+            self.factory.message.push(self)
 
-            deferred.callback(None)
+        else:
+          self.factory.message.push(self)
 
-        threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
-
-      else:
-        message.append(self)
-
-        deferred.callback(None)
+    filter()
 
     return self.deferred
 
@@ -284,29 +312,27 @@ class NullMessage(Message):
 
 class SMTPServer(smtp.ESMTP):
   def connectionMade(self):
-    global running
+    self.factory = SMTPClientFactory()
+    self.factory.message = Queue()
 
-    if not running:
-      factory = SMTPClientFactory()
-      reactor.connectTCP('localhost', 1894, factory)
-
-      running = True
+    reactor.connectTCP('localhost', 1894, self.factory)
 
     return smtp.ESMTP.connectionMade(self)
 
   # Override ESMTP.do_EHLO() to supress sendCode() until client replies
+  @coroutine
   def do_EHLO(self, rest):
     peer = self.transport.getPeer().host
     self._helo = (rest, peer)
     self._from = None
     self._to = []
 
-    def callback(result):
-      self.sendCode(*result)
+    result = yield ehlo
 
-      return result
+    self.sendCode(*result)
 
-    ehlo.addCallback(callback)
+    #return result
+    raise StopIteration(result)
 
   # Suppress Received header because we're a content filter
   def receivedHeader(self, helo, origin, recipients):
@@ -323,6 +349,7 @@ class SMTPServer(smtp.ESMTP):
   def validateTo(self, user):
     message = self.message
     message.data = self.data
+    message.factory = self.factory
     message.user = user
 
     # NullMessage for subsequent recipients
@@ -338,6 +365,8 @@ factory = SMTPServerFactory()
 reactor.listenTCP(1438, factory, interface='localhost')
 
 class Request(http.Request):
+
+  @coroutine
   def process(self):
     if not re.match('/' + rfc5322.addrSpec, self.path):
       self.setResponseCode(http.NOT_FOUND)
@@ -355,39 +384,37 @@ class Request(http.Request):
 
         return result
 
-      def callback(result):
-        try:
-          self.write(result[0][0])
+      result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
 
-        except IndexError:
-          alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+      try:
+        self.write(result[0][0])
 
-          # Choose six letters from alphabet, at random
-          letter = random()
-          sender = ''
-          for ignore in range(6):
-            letter *= len(alphabet)
-            sender += alphabet[int(letter)]
-            letter -= int(letter)
+      except IndexError:
+        alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
-          def insert():
-            conn = adbapi.Connection(pool)
-            trans = adbapi.Transaction(pool, conn)
+        # Choose six letters from alphabet, at random
+        letter = random()
+        sender = ''
+        for ignore in range(6):
+          letter *= len(alphabet)
+          sender += alphabet[int(letter)]
+          letter -= int(letter)
 
-            trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.path[1:], sender))
-            trans.close()
+        def insert():
+          conn = adbapi.Connection(pool)
+          trans = adbapi.Transaction(pool, conn)
 
-          def callback(result):
-            self.write(sender)
+          trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.path[1:], sender))
+          trans.close()
 
-            self.finish()
+        yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
 
-          threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+        self.write(sender)
 
-        else:
-          self.finish()
+        self.finish()
 
-      threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
+      else:
+        self.finish()
 
 class HTTPServer(http.HTTPChannel):
   requestFactory = Request

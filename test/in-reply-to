@@ -15,32 +15,13 @@ def insert():
   trans.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', ('1234567890@example.com', 'abc123'))
   trans.close()
 
-message = [{
-  'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
-  by example.com (Postfix) with ESMTPA
-  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
-From: notalice@example.com
-In-Reply-To: <1234567890@example.com>
-
-la di da
-'''),
-  'from': 'alice@example.com',
-  'to': ['bob@example.com'] }]
-
 def callback(result):
   class Message:
     def __init__(self):
       self.data = []
 
     def eomReceived(self):
-      equal("\n".join(self.data) + "\n", '''Received: from example.com (localhost [127.0.0.1])
-  by example.com (Postfix) with ESMTPA
-  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
-From: abc123@nottheoilrig.com
-In-Reply-To: <1234567890@example.com>
-
-la di da
-''')
+      equal("\n".join(self.data) + "\n", self.expect['data'])
 
       return defer.succeed(None)
 
@@ -55,20 +36,43 @@ la di da
       pass
 
     def validateFrom(self, helo, origin):
-      equal(str(origin), 'abc123@nottheoilrig.com')
+      self.expect = self.expect.pop(0)
+
+      equal(str(origin), self.expect['from'])
 
       return origin
 
     def validateTo(self, user):
-      equal(str(user), 'bob@example.com')
+      equal(str(user), self.expect['to'].pop(0))
 
-      return Message
+      message = Message()
+      message.expect = self.expect
+
+      return lambda: message
 
   # ESMTPFactory doesn't exist
   class ServerFactory(smtp.SMTPFactory):
     protocol = Server
 
+    def buildProtocol(self, addr):
+      protocol = smtp.SMTPFactory.buildProtocol(self, addr)
+      protocol.expect = self.expect.pop(0)
+
+      return protocol
+
   factory = ServerFactory()
+  factory.expect = [[{
+    'data': '''Received: from example.com (localhost [127.0.0.1])
+  by example.com (Postfix) with ESMTPA
+  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
+From: abc123@nottheoilrig.com
+In-Reply-To: <1234567890@example.com>
+
+la di da
+''',
+    'from': 'abc123@nottheoilrig.com',
+    'to': ['bob@example.com'] }]]
+
   reactor.listenTCP(1894, factory)
 
   class Client(smtp.ESMTPClient):
@@ -77,26 +81,28 @@ la di da
     def __init__(self, *args, **kw):
       self.secret = None
 
-      return smtp.SMTPClient.__init__(self, *args, **kw)
+      return smtp.SMTPClient.__init__(self, 'example.com', *args, **kw)
 
     def getMailData(self):
-      return message[0]['data']
+      return self.message['data']
 
     def getMailFrom(self):
-      return message[0]['from']
+      return self.message['from']
 
     def getMailTo(self):
-      return message[0]['to']
+      return self.message['to']
+
+    def smtpState_from(self, code, resp):
+      self.message = self.factory.message.pop(0)
+
+      return smtp.ESMTPClient.smtpState_from(self, code, resp)
 
     def smtpState_msgSent(self, code, resp):
-      global message
-
-      message = message[1:]
-      if message:
+      if self.factory.message:
         self._from = None
         self.toAddressesResult = []
 
-        return smtp.ESMTPClient.smtpState_msgSent(self, code, resp)
+        return self.smtpState_from(code, resp)
 
       # No more messages to send
       self._disconnectFromServer()
@@ -104,10 +110,19 @@ la di da
   class ClientFactory(protocol.ClientFactory):
     protocol = Client
 
-    def buildProtocol(self, addr):
-      return self.protocol('example.com')
-
   factory = ClientFactory()
+  factory.message = [{
+    'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
+  by example.com (Postfix) with ESMTPA
+  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
+From: notalice@example.com
+In-Reply-To: <1234567890@example.com>
+
+la di da
+'''),
+    'from': 'alice@example.com',
+    'to': ['bob@example.com'] }]
+
   reactor.connectTCP('localhost', 1438, factory)
 
 threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)

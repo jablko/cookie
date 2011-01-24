@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import re
 from mail.test import equal, expect, ok
 from StringIO import StringIO
 from twisted.enterprise import adbapi
@@ -8,17 +7,6 @@ from twisted.internet import defer, protocol, reactor, threads
 from twisted.mail import smtp
 
 expect(3)
-
-message = [{
-  'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
-  by example.com (Postfix) with ESMTPA
-  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
-From: notalice@example.com
-
-la di da
-'''),
-  'from': 'alice@example.com',
-  'to': ['bob@example.com'] }]
 
 class Message:
   def __init__(self):
@@ -48,20 +36,33 @@ class Server(smtp.ESMTP):
   def validateFrom(self, helo, origin):
     global sender
 
+    self.expect = self.expect.pop(0)
+
     sender = origin
 
     return origin
 
   def validateTo(self, user):
-    equal(str(user), 'bob@example.com')
+    equal(str(user), self.expect['to'].pop(0))
 
-    return Message
+    message = Message()
+    message.expect = self.expect
+
+    return lambda: message
 
 # ESMTPFactory doesn't exist
 class ServerFactory(smtp.SMTPFactory):
   protocol = Server
 
+  def buildProtocol(self, addr):
+    protocol = smtp.SMTPFactory.buildProtocol(self, addr)
+    protocol.expect = self.expect.pop(0)
+
+    return protocol
+
 factory = ServerFactory()
+factory.expect = [[{ 'to': ['bob@example.com'] }]]
+
 reactor.listenTCP(1894, factory)
 
 class Client(smtp.ESMTPClient):
@@ -70,26 +71,28 @@ class Client(smtp.ESMTPClient):
   def __init__(self, *args, **kw):
     self.secret = None
 
-    return smtp.SMTPClient.__init__(self, *args, **kw)
+    return smtp.SMTPClient.__init__(self, 'example.com', *args, **kw)
 
   def getMailData(self):
-    return message[0]['data']
+    return self.message['data']
 
   def getMailFrom(self):
-    return message[0]['from']
+    return self.message['from']
 
   def getMailTo(self):
-    return message[0]['to']
+    return self.message['to']
+
+  def smtpState_from(self, code, resp):
+    self.message = self.factory.message.pop(0)
+
+    return smtp.ESMTPClient.smtpState_from(self, code, resp)
 
   def smtpState_msgSent(self, code, resp):
-    global message
-
-    message = message[1:]
-    if message:
+    if self.factory.message:
       self._from = None
       self.toAddressesResult = []
 
-      return smtp.ESMTPClient.smtpState_msgSent(self, code, resp)
+      return self.smtpState_from(code, resp)
 
     # No more messages to send
     self._disconnectFromServer()
@@ -97,10 +100,18 @@ class Client(smtp.ESMTPClient):
 class ClientFactory(protocol.ClientFactory):
   protocol = Client
 
-  def buildProtocol(self, addr):
-    return self.protocol('example.com')
-
 factory = ClientFactory()
+factory.message = [{
+  'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
+  by example.com (Postfix) with ESMTPA
+  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
+From: notalice@example.com
+
+la di da
+'''),
+  'from': 'alice@example.com',
+  'to': ['bob@example.com'] }]
+
 reactor.connectTCP('localhost', 1438, factory)
 
 def timeout():

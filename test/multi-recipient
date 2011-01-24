@@ -12,16 +12,12 @@ class Message:
     self.data = []
 
   def eomReceived(self):
-    equal("\n".join(self.data) + "\n", '''
-la di da
-''')
+    equal("\n".join(self.data) + "\n", self.expect['data'])
 
     return defer.succeed(None)
 
   def lineReceived(self, line):
     self.data.append(line)
-
-expected = ['bob@example.com', 'carol@example.com']
 
 class Server(smtp.ESMTP):
   def do_UNKNOWN(self, rest):
@@ -31,32 +27,44 @@ class Server(smtp.ESMTP):
     pass
 
   def validateFrom(self, helo, origin):
-    equal(str(origin), 'alice@example.com')
+    self.expect = self.expect.pop(0)
+
+    equal(str(origin), self.expect['from'])
 
     return origin
 
   def validateTo(self, user):
-    global expected
+    equal(str(user), self.expect['to'].pop(0))
 
-    equal(str(user), expected[0])
+    message = Message()
+    message.expect = self.expect
 
-    expected = expected[1:]
-
-    return Message
+    return lambda: message
 
 # ESMTPFactory doesn't exist
 class ServerFactory(smtp.SMTPFactory):
   protocol = Server
 
-factory = ServerFactory()
-reactor.listenTCP(1894, factory)
+  def buildProtocol(self, addr):
+    protocol = smtp.SMTPFactory.buildProtocol(self, addr)
+    protocol.expect = self.expect.pop(0)
 
-message = [{
-  'data': StringIO('''
+    return protocol
+
+factory = ServerFactory()
+factory.expect = [[{
+  'data': '''
 la di da
-'''),
+''',
   'from': 'alice@example.com',
-  'to': ['bob@example.com', 'carol@example.com'] }]
+  'to': ['bob@example.com'] }, {
+  'data': '''
+la di da
+''',
+  'from': 'alice@example.com',
+  'to': ['carol@example.com'] }]]
+
+reactor.listenTCP(1894, factory)
 
 class Client(smtp.ESMTPClient):
 
@@ -64,26 +72,28 @@ class Client(smtp.ESMTPClient):
   def __init__(self, *args, **kw):
     self.secret = None
 
-    return smtp.SMTPClient.__init__(self, *args, **kw)
+    return smtp.SMTPClient.__init__(self, 'example.com', *args, **kw)
 
   def getMailData(self):
-    return message[0]['data']
+    return self.message['data']
 
   def getMailFrom(self):
-    return message[0]['from']
+    return self.message['from']
 
   def getMailTo(self):
-    return message[0]['to']
+    return self.message['to']
+
+  def smtpState_from(self, code, resp):
+    self.message = self.factory.message.pop(0)
+
+    return smtp.ESMTPClient.smtpState_from(self, code, resp)
 
   def smtpState_msgSent(self, code, resp):
-    global message
-
-    message = message[1:]
-    if message:
+    if self.factory.message:
       self._from = None
       self.toAddressesResult = []
 
-      return smtp.ESMTPClient.smtpState_msgSent(self, code, resp)
+      return self.smtpState_from(code, resp)
 
     # No more messages to send
     self._disconnectFromServer()
@@ -91,8 +101,12 @@ class Client(smtp.ESMTPClient):
 class ClientFactory(protocol.ClientFactory):
   protocol = Client
 
-  def buildProtocol(self, addr):
-    return self.protocol('example.com')
-
 factory = ClientFactory()
+factory.message = [{
+  'data': StringIO('''
+la di da
+'''),
+  'from': 'alice@example.com',
+  'to': ['bob@example.com', 'carol@example.com'] }]
+
 reactor.connectTCP('localhost', 1438, factory)
