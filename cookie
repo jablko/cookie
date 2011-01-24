@@ -264,8 +264,6 @@ class Message:
         self.data.write(re.sub(rfc5322.From, repl, self.data.getvalue(), 1))
         self.data.truncate()
 
-        self.factory.message.push(self)
-
       else:
         match = re.search(rfc5322.messageId, self.data.getvalue())
         if match:
@@ -290,13 +288,7 @@ class Message:
 
             yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
 
-            self.factory.message.push(self)
-
-          else:
-            self.factory.message.push(self)
-
-        else:
-          self.factory.message.push(self)
+      self.factory.message.push(self)
 
     filter()
 
@@ -371,8 +363,6 @@ class Request(http.Request):
     if not re.match('/' + rfc5322.addrSpec, self.path):
       self.setResponseCode(http.NOT_FOUND)
 
-      self.finish()
-
     else:
       def select():
         conn = adbapi.Connection(pool)
@@ -411,10 +401,7 @@ class Request(http.Request):
 
         self.write(sender)
 
-        self.finish()
-
-      else:
-        self.finish()
+    self.finish()
 
 class HTTPServer(http.HTTPChannel):
   requestFactory = Request
