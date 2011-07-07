@@ -60,3 +60,5 @@ def _():
           'la di da')),)).next
 
       yield sample.__get__(ctx)()
+
+  return _

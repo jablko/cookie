@@ -51,3 +51,5 @@ def _():
 
         #return ...
         raise StopIteration(ctx.quitCmd())
+
+  return _

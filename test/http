@@ -23,3 +23,5 @@ def _():
         ctx.endHeaders()
 
       handleResponse = staticmethod(untwisted.partial(equal, 'abc123'))
+
+  return promise.promise()

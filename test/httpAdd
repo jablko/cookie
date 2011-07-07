@@ -25,3 +25,5 @@ def _():
         cursor.close()
 
         equal(((response,),), result)
+
+  return promise.promise()

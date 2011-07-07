@@ -18,7 +18,7 @@ def sdfg(cbl):
   cursor.execute('DELETE FROM message_id')
   cursor.close()
 
-  cbl()
+  cbl().then(lambda *args, **kwds: reactor.stop())
 
   @untwisted.call
   @promise.continuate

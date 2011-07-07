@@ -23,6 +23,8 @@ def _():
 
       handleStatus = lambda ctx, version, status, message: equal('404', status)
 
+  return promise.promise()
+
 cursor = conn.cursor()
 cursor.execute('SELECT sender FROM address')
 result = cursor.fetchall()
