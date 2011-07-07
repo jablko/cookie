@@ -47,8 +47,7 @@ def _():
       def __init__(ctx):
         smtp.server.mail.__init__(ctx)
 
-        ctx.qwer = []
-        ctx.recipient = ctx.qwer.append
+        ctx.recipient = [].append
 
       def mail(ctx, mailbox):
         ctx.sender = mailbox
@@ -83,7 +82,7 @@ def _():
             pass
 
           else:
-            for recipient in ctx.qwer:
+            for recipient in ctx.recipient.__self__:
               cursor = conn.cursor()
               cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
               result = cursor.fetchone()
@@ -104,7 +103,7 @@ def _():
             #return ...
             raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
-          for recipient in ctx.qwer:
+          for recipient in ctx.recipient.__self__:
             try:
               yield mail.rcptCmd(recipient)
 
@@ -239,8 +238,8 @@ def _():
             # proxied to the incoming client.  All success replies are
             # expected, so an unexpected reply is an error
 
-            #head, *rest = ctx.qwer
-            head, rest = ctx.qwer[0], ctx.qwer[1:]
+            #head, *rest = ctx.recipient.__self__
+            head, rest = ctx.recipient.__self__[0], ctx.recipient.__self__[1:]
 
             # Closure
             sender = asdf(head)
@@ -268,7 +267,7 @@ def _():
 
             raise reply
 
-        raise (yield filter(*ctx.qwer))
+        raise (yield filter(*ctx.recipient.__self__))
 
       @promise.continuate
       def afterRecipientZxcv(ctx, command, state):
