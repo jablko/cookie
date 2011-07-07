@@ -1,50 +1,27 @@
 #!/usr/bin/env python
 
-from mail.test import equal, expect, ok
-from twisted.enterprise import adbapi
-from twisted.internet import protocol, reactor, threads
+from cookie.test import *
+from twisted.internet import protocol
 from twisted.web import http
 
 expect(1)
 
-class Client(http.HTTPClient):
-  def connectionMade(self):
-    self.sendCommand('GET', '/bob@example.com')
+@sdfg
+def _():
 
-    self.endHeaders()
+  @untwisted.partial(reactor.connectTCP, 'localhost', 8743)
+  @untwisted.call
+  class _(protocol.ClientFactory):
+    class protocol(http.HTTPClient):
+      def connectionMade(ctx):
+        ctx.sendCommand('GET', '/bob@example.com')
 
-  def handleResponse(self, response):
-    global sender
+        ctx.endHeaders()
 
-    sender = response
+      def handleResponse(ctx, response):
+        cursor = conn.cursor()
+        cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com')
+        result = cursor.fetchall()
+        cursor.close()
 
-class ClientFactory(protocol.ClientFactory):
-  protocol = []
-
-  def buildProtocol(self, addr):
-    return self.protocol.pop(0)
-
-factory = ClientFactory()
-
-protocol = Client()
-factory.protocol.append(protocol)
-
-reactor.connectTCP('localhost', 8743, factory)
-
-def timeout():
-  def select():
-    conn = adbapi.Connection(pool)
-    trans = adbapi.Transaction(pool, conn)
-
-    trans.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com')
-    result = trans.fetchall()
-    trans.close()
-
-    return result
-
-  def callback(result):
-    equal(result, ((sender,),))
-
-  threads.deferToThreadPool(reactor, pool.threadpool, select).addCallback(callback)
-
-reactor.callLater(1, timeout)
+        equal(((response,),), result)

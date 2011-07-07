@@ -1,41 +1,66 @@
 #!/usr/bin/env python
 
-from mail import test
-from mail.test import equal, expect, ok
-from StringIO import StringIO
-from twisted.internet import reactor
+from cookie.test import *
+from untwisted import smtp
 
 expect(6)
 
-factory = test.ServerFactory()
+@sdfg
+def _():
+  cursor = conn.cursor()
+  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
+  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
+  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'carol@example.com', '321cba')
+  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('carol@example.com', '321cba'))
+  cursor.close()
 
-protocol = test.Server()
-protocol.expect = [{
-  'data': '''
-la di da
-''',
-  'from': 'alice@example.com',
-  'to': ['bob@example.com'] }, {
-  'data': '''
-la di da
-''',
-  'from': 'alice@example.com',
-  'to': ['carol@example.com'] }]
+  #@listen().then
+  @untwisted.identity(listen().then)
+  class _(smtp.server):
 
-factory.protocol.append(protocol)
+    @untwisted.each
+    def mail():
+      ctx = yield
 
-reactor.listenTCP(1894, factory)
+      class sample(smtp.server.mail):
+        mail = staticmethod(untwisted.each(lambda: equal('abc123@nottheoilrig.com', str((yield)))))
+        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
+        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+          '  by example.com (Postfix) with ESMTPA;',
+          '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          'From: abc123@nottheoilrig.com',
+          '',
+          'la di da')), (yield))))
 
-factory = test.ClientFactory()
+      ctx = yield sample.__get__(ctx)()
 
-protocol = test.Client()
-protocol.message = [{
-  'data': StringIO('''
-la di da
-'''),
-  'from': 'alice@example.com',
-  'to': ['bob@example.com', 'carol@example.com'] }]
+      class sample(smtp.server.mail):
+        mail = staticmethod(untwisted.each(lambda: equal('321cba@nottheoilrig.com', str((yield)))))
+        recipient = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
+        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
+          'la di da')), (yield))))
 
-factory.protocol.append(protocol)
+      ctx = yield sample.__get__(ctx)()
 
-reactor.connectTCP('localhost', 1438, factory)
+      # QUIT
+      yield smtp.server.mail.__get__(ctx)()
+
+  #@connect().then
+  @untwisted.identity(connect().then)
+  class _(smtp.client):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.client.mail):
+        mail = iter(('alice@example.com',)).next
+        recipient = iter(('bob@example.com', 'carol@example.com')).next
+        data = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+          '  by example.com (Postfix) with ESMTPA;',
+          '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          'From: notalice@example.com',
+          '',
+          'la di da')),)).next
+
+      yield sample.__get__(ctx)()

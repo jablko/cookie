@@ -1,407 +1,332 @@
 #!/usr/bin/env python
 
-import functools, re, rfc5321, rfc5322, socket, sys
+import MySQLdb, sys, untwisted
+from qwer import *
 from random import random
-from StringIO import StringIO
-from twisted.enterprise import adbapi
-from twisted.internet import defer, protocol, reactor, threads
-from twisted.mail import smtp
-from twisted.python import failure, log
+from twisted.internet import reactor
+from twisted.python import log
 from twisted.web import http
+from untwisted import promise, rfc5321, rfc5322, smtp, tcp
 
 log.startLogging(sys.stdout)
 
-def coroutine(function):
-  def wrapper(*args, **kw):
-    generator = function(*args, **kw)
+conn = MySQLdb.connect(db='cookie', user='root')
 
-    # TODO Tail call elimination
-    def callback(result):
-      try:
+@untwisted.call
+@promise.continuate
+def _():
+  connect = tcp.connect('localhost', 1894)
 
-        # .addBoth() so as not to errback exceptions in callback to callback
-        return (generator.throw(result.type, result.value, result.tb) if isinstance(result, failure.Failure) else generator.send(result)).addBoth(callback)
+  class server(smtp.server):
+    class __metaclass__(smtp.server.__metaclass__):
 
-      except StopIteration, e:
+      @promise.continuate
+      def __call__(ctx, transport):
+        server = type.__call__(ctx, transport)
+
+        # Technically we needn't wait for a downstream connection or greeting
+        # before processing an upstream MAIL command, but this complicates our
+        # implementation: We *must* wait for a downstream connection before
+        # issuing any downstream commands.  Receiving a MAIL command before a
+        # hello command - or receiving *any* command before issuing a greeting -
+        # is in violation of SMTP specification, so advantages of this
+        # optimization are vanishing
+        #
+        #server.client = smtp.client(connect())
+        #server.client.transport.then(untwisted.partial(setattr, server.client, 'transport'))
+        server.client = type.__call__(smtp.client, (yield connect()))
+
+        # Greeting
+        transport.write(str((yield server.client.reply(untwisted.wildcard))))
+
+        # Proxy all commands outside mail transaction
+        #return ...
+        raise StopIteration(server.mail())
+
+    class mail(smtp.server.mail):
+      def __init__(ctx):
+        smtp.server.mail.__init__(ctx)
+
+        ctx.qwer = []
+        ctx.recipient = ctx.qwer.append
+
+      def mail(ctx, mailbox):
+        ctx.sender = mailbox
+
+      @promise.continuate
+      def start(ctx, command, state):
+        if 'MAIL' == command.verb:
+          #return ...
+          raise StopIteration(smtp.server.mail.start(ctx, command, state))
+
+        # Proxy all commands outside mail transaction
+        ctx.ctx.client.transport.write(str(command))
+
+        ctx.ctx.transport.write(str((yield ctx.ctx.client.reply(untwisted.wildcard))))
+
+        #return ...
+        raise StopIteration(state((yield ctx.ctx.command()), state))
+
+      @promise.continuate
+      def data(ctx, data):
+        mail = type.__call__(ctx.ctx.client.mail)
+
         try:
-          return e.args[0]
+          rfc5321.timeStampLine.match(data)
 
-        except IndexError:
-          pass
+        # Not authenticated, ESMTPA
+        except ValueError:
+          try:
+            messageId = rfc5322.messageId.search(data, 'idLeft, idRight')
 
-    try:
+          except ValueError:
+            pass
 
-      # .addBoth() so as not to errback exceptions in callback to callback
-      return generator.next().addBoth(callback)
+          else:
+            for recipient in ctx.qwer:
+              cursor = conn.cursor()
+              cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
+              result = cursor.fetchone()
+              cursor.close()
 
-    except StopIteration, e:
-      try:
-        return e.args[0]
-
-      except IndexError:
-        pass
-
-  return functools.update_wrapper(wrapper, function)
-
-class Queue:
-  def __init__(self):
-    self.deferred = []
-    self.item = []
-
-  def push(self, item):
-    try:
-      self.deferred.pop(0).callback(item)
-
-    except IndexError:
-      self.item.append(item)
-
-    return self
-
-  def shift(self):
-    try:
-      return defer.succeed(self.item.pop(0))
-
-    except IndexError:
-      deferred = defer.Deferred()
-      self.deferred.append(deferred)
-
-      return deferred
-
-# Cache our domain
-domain = socket.getfqdn()
-
-ehlo = defer.Deferred()
-
-class SMTPClient(smtp.ESMTPClient):
-
-  # Shortcut ESMTPClient.__init__(), no authentication or TLS
-  def __init__(self, *args, **kw):
-    self.secret = None
-
-    return smtp.SMTPClient.__init__(self, domain, *args, **kw)
-
-  def esmtpState_serverConfig(self, *args, **kw):
-    try:
-      ehlo.callback(args)
-
-    except defer.AlreadyCalledError:
-      ehlo.result = args
-
-    return smtp.ESMTPClient.esmtpState_serverConfig(self, *args, **kw)
-
-  def getMailData(self):
-    self.item.data.seek(0)
-
-    return self.item.data
-
-  def getMailFrom(self):
-    return self.item.user.orig
-
-  def getMailTo(self):
-    return [str(self.item.user)]
-
-  # Wait for message from client
-  @coroutine
-  def smtpState_from(self, code, resp):
-    self.item = yield self.factory.message.shift()
-
-    smtp.ESMTPClient.smtpState_from(self, code, resp)
-
-  def smtpState_msgSent(self, code, resp):
-    self.item.deferred.callback(None)
-
-    self._from = None
-    self.toAddressesResult = []
-
-    return self.smtpState_from(code, resp)
-
-class SMTPClientFactory(protocol.ClientFactory):
-  protocol = SMTPClient
-
-pool = adbapi.ConnectionPool('MySQLdb', db='cookie', user='root')
-
-# Buffer lines to .data, call .deferred on delivery success or failure
-class Message:
-  def eomReceived(self):
-    self.deferred = defer.Deferred()
-
-    @coroutine
-    def filter():
-
-      # No need to compile regex, most recent patterns are cached,
-      # http://docs.python.org/library/re#re.compile
-      if re.match(rfc5321.timeStampLine, self.data.getvalue()):
-
-        @coroutine
-        def messageId(pattern):
-
-          # TODO Support multiple message ids, regex currently supports only one
-          match = re.search(pattern, self.data.getvalue())
-          if not match:
-            raise
-
-          def select():
-            conn = adbapi.Connection(pool)
-            trans = adbapi.Transaction(pool, conn)
-
-            trans.execute('SELECT sender FROM message_id WHERE message_id = %s', match.group(1))
-            result = trans.fetchall()
-            trans.close()
-
-            return result
-
-          result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
+              if result[0]:
+                cursor = conn.cursor()
+                #cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '@'.join(messageId), recipient.localPart)
+                cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (messageId.join('@'), recipient.localPart))
+                cursor.close()
 
           try:
-            #return result[0][0]
-            raise StopIteration(result[0][0])
+            yield mail.mailCmd(ctx.sender)
 
-          except IndexError:
-            raise
+          except smtp.reply as e:
+            ctx.ctx.transport.write(str(e))
+
+            #return ...
+            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+
+          for recipient in ctx.qwer:
+            try:
+              yield mail.rcptCmd(recipient)
+
+            except smtp.reply as e:
+              ctx.ctx.transport.write(str(e))
+
+              #return ...
+              raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+
+          try:
+            reply = yield mail.dataCmd(data)
+
+          except smtp.reply as e:
+            ctx.ctx.transport.write(str(e))
+
+            #return ...
+            raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+
+          raise reply
+
+        # Authenticated, ESMTPA
+
+        def messageId(qwer):
+          try:
+            msgId = qwer.search(data, 'msgId ( idLeft, idRight )')
+
+          except ValueError:
+            raise Exception
+
+          # TODO
+          for msgId in msgId:
+            cursor = conn.cursor()
+            cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
+            result = cursor.fetchone()
+            cursor.close()
+
+            try:
+              return result[0]
+
+            except IndexError:
+              raise Exception
+
+        def replace(mailbox):
+          result = 'From:'
+
+          if mailbox.nameAddr:
+            result += str(mailbox.displayName) + str(mailbox['nameAddr > CFWS:first-child']) + '<' + str(mailbox['localPart > CFWS:first-child']) + sender + str(mailbox['localPart > * + CFWS']) + '@' + str(mailbox['domain > CFWS:first-child']) + 'nottheoilrig.com' + str(mailbox['domain > * + CFWS']) + '>' + str(mailbox['nameAddr > * + CFWS'])
+
+          else:
+            result += str(mailbox['localPart > CFWS:first-child']) + sender + str(mailbox['localPart > * + CFWS']) + '@' + str(mailbox['domain > CFWS:first-child']) + 'nottheoilrig.com' + str(mailbox['domain > * + CFWS'])
+
+          result += '\r\n'
+
+          return result
+
+        # Filter/forward/proxy message with sender and recipient
+
+        @promise.continuate
+        def filter(*recipient):
+          try:
+            yield mail.mailCmd(sender + '@nottheoilrig.com')
+
+          # Client only raises reply if unexpected/unsuccessful
+          except smtp.reply as e:
+            ctx.ctx.transport.write(str(e))
+
+            #return ...
+            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+
+          for itm in recipient:
+            try:
+              yield mail.rcptCmd(itm)
+
+            # Client only raises reply if unexpected/unsuccessful
+            except smtp.reply as e:
+              ctx.ctx.transport.write(str(e))
+
+              #return ...
+              raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+
+          try:
+            #return ...
+            raise StopIteration(mail.dataCmd(rfc5322.From.replace(replace, data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)))
+
+          # Client only raises reply if unexpected/unsuccessful
+          except smtp.reply as e:
+            ctx.ctx.transport.write(str(e))
+
+            #return ...
+            raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
 
-        except:
+        except Exception:
           try:
             sender = yield messageId(rfc5322.references)
 
-          except:
-            def select():
-              conn = adbapi.Connection(pool)
-              trans = adbapi.Transaction(pool, conn)
+          except Exception:
 
-              trans.execute('SELECT sender FROM address WHERE address = %s', self.user)
-              result = trans.fetchall()
-              trans.close()
+            # Send/forward/proxy to one recipient, generating new sender
 
-              return result
+            def asdf(recipient):
+              cursor = conn.cursor()
+              cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
+              result = cursor.fetchone()
+              cursor.close()
 
-            result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
+              try:
+                return result[0]
 
-            try:
-              sender = result[0][0]
+              except TypeError:
+                alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
-            except IndexError:
-              alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+                # Choose six letters from alphabet, at random
+                letter = random()
+                sender = ''
+                for _ in range(6):
+                  letter *= len(alphabet)
+                  sender += alphabet[int(letter)]
+                  letter -= int(letter)
 
-              # Choose six letters from alphabet, at random
-              letter = random()
-              sender = ''
-              for ignore in range(6):
-                letter *= len(alphabet)
-                sender += alphabet[int(letter)]
-                letter -= int(letter)
+                cursor = conn.cursor()
+                #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
+                cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (recipient, sender))
+                cursor.close()
 
-              def insert():
-                conn = adbapi.Connection(pool)
-                trans = adbapi.Transaction(pool, conn)
+                return sender
 
-                trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.user, sender))
-                trans.close()
+            # Wait for first mail, an unexpected reply falls through, aborting
+            # this and additional mail.  An unexpected reply is caught and
+            # proxied to the incoming client.  All success replies are
+            # expected, so an unexpected reply is an error
 
-              yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
+            #head, *rest = ctx.qwer
+            head, rest = ctx.qwer[0], ctx.qwer[1:]
 
-        self.user.orig.local = sender
-        self.user.orig.domain = 'nottheoilrig.com'
+            # Closure
+            sender = asdf(head)
 
-        def repl(match):
-          repl = 'From:'
+            reply = yield filter(head)
 
-          # displayName
-          if match.group(1):
-            repl += match.group(1)
+            @untwisted.call
+            @promise.continuate
+            def _():
+              for recipient in rest:
+                sender = asdf(recipient)
 
-          # angleAddr
-          if match.group(3):
-            repl += match.group(3)
+                try:
+                  yield mail.mailCmd(sender + '@nottheoilrig.com')
 
-            # localPart dotAtom
-            if match.group(4):
-              repl += match.group(4)
+                  yield mail.rcptCmd(recipient)
 
-            # localPart quotedString
-            elif match.group(6):
-              repl += match.group(6)
+                  yield mail.dataCmd(rfc5322.From.replace(replace, data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
-            repl += str(self.user.orig)
+                # Client only raises reply if unexpected/unsuccessful
+                except smtp.reply:
 
-            # domain dotAtom
-            if match.group(8):
-              repl += match.group(8)
+                  # TODO Bounce
+                  pass
 
-            # domain domainLiteral
-            elif match.group(9):
-              repl += match.group(9)
+            raise reply
 
-            repl += match.group(10)
+        raise (yield filter(*ctx.qwer))
 
-          else:
+      @promise.continuate
+      def afterRecipientZxcv(ctx, command, state):
+        if 'DATA' == command.verb:
+          ctx.ctx.client.transport.write(str(smtp.command('RSET')))
 
-            # localPart dotAtom
-            if match.group(11):
-              repl += match.group(11)
+          try:
+            yield ctx.ctx.client.reply()
 
-            # localPart quotedString
-            elif match.group(13):
-              repl += match.group(13)
+          except smtp.reply as e:
+            ctx.ctx.transport.write(str(e))
 
-            repl += str(self.user.orig)
+            #return ...
+            raise StopIteration(state((yield ctx.ctx.command()), state))
 
-            # domain dotAtom
-            if match.group(14):
-              repl += match.group(14)
+        #return ...
+        raise StopIteration(ctx.afterRecipient(command, state))
 
-            # domain domainLiteral
-            elif match.group(16):
-              repl += match.group(16)
-
-          repl += '\n'
-
-          return repl
-
-        self.data.seek(0)
-        self.data.write(re.sub(rfc5322.From, repl, self.data.getvalue(), 1))
-        self.data.truncate()
-
-      else:
-        match = re.search(rfc5322.messageId, self.data.getvalue())
-        if match:
-          def select():
-            conn = adbapi.Connection(pool)
-            trans = adbapi.Transaction(pool, conn)
-
-            trans.execute('SELECT COUNT(*) FROM address WHERE sender = %s', self.user.dest.local)
-            result = trans.fetchall()
-            trans.close()
-
-            return result
-
-          result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
-          if result[0][0]:
-            def insert():
-              conn = adbapi.Connection(pool)
-              trans = adbapi.Transaction(pool, conn)
-
-              trans.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (match.group(1), self.user.dest.local))
-              trans.close()
-
-            yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
-
-      self.factory.message.push(self)
-
-    filter()
-
-    return self.deferred
-
-  def lineReceived(self, line):
-    self.data.write(line + "\n")
-
-# Ignore lines, only buffer once per message, use for multiple recipients
-class NullMessage(Message):
-  def lineReceived(self, line):
-    pass
-
-class SMTPServer(smtp.ESMTP):
-  def connectionMade(self):
-    self.factory = SMTPClientFactory()
-    self.factory.message = Queue()
-
-    reactor.connectTCP('localhost', 1894, self.factory)
-
-    return smtp.ESMTP.connectionMade(self)
-
-  # Override ESMTP.do_EHLO() to supress sendCode() until client replies
-  @coroutine
-  def do_EHLO(self, rest):
-    peer = self.transport.getPeer().host
-    self._helo = (rest, peer)
-    self._from = None
-    self._to = []
-
-    result = yield ehlo
-
-    self.sendCode(*result)
-
-    #return result
-    raise StopIteration(result)
-
-  # Suppress Received header because we're a content filter
-  def receivedHeader(self, helo, origin, recipients):
-    pass
-
-  # Message for first recipient
-  def validateFrom(self, helo, origin):
-    self.data = StringIO()
-    self.item = Message()
-
-    return origin
-
-  # Don't yet know if we're sending (ESMTPA) or receiving (ESMTP)
-  def validateTo(self, user):
-    message = self.item
-    message.data = self.data
-    message.factory = self.factory
-    message.user = user
-
-    # NullMessage for subsequent recipients
-    self.item = NullMessage()
-
-    return lambda: message
-
-# ESMTPFactory doesn't exist
-class SMTPServerFactory(smtp.SMTPFactory):
-  protocol = SMTPServer
-
-factory = SMTPServerFactory()
-reactor.listenTCP(1438, factory, interface='localhost')
+  listen = tcp.listen(1438, interface='localhost')
+  while True:
+    server((yield listen()))
 
 class Request(http.Request):
+  def process(ctx):
+    try:
+      qwer('/', rfc5322.addrSpec).match(ctx.path)
 
-  @coroutine
-  def process(self):
-    if not re.match('/' + rfc5322.addrSpec, self.path):
-      self.setResponseCode(http.NOT_FOUND)
+    except ValueError:
+      ctx.setResponseCode(http.NOT_FOUND)
 
     else:
-      def select():
-        conn = adbapi.Connection(pool)
-        trans = adbapi.Transaction(pool, conn)
-
-        trans.execute('SELECT sender FROM address WHERE address = %s', self.path[1:])
-        result = trans.fetchall()
-        trans.close()
-
-        return result
-
-      result = yield threads.deferToThreadPool(reactor, pool.threadpool, select)
+      cursor = conn.cursor()
+      cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
+      result = cursor.fetchone()
+      cursor.close()
 
       try:
-        self.write(result[0][0])
+        ctx.write(result[0])
 
-      except IndexError:
+      except TypeError:
         alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
         # Choose six letters from alphabet, at random
         letter = random()
         sender = ''
-        for ignore in range(6):
+        for _ in range(6):
           letter *= len(alphabet)
           sender += alphabet[int(letter)]
           letter -= int(letter)
 
-        def insert():
-          conn = adbapi.Connection(pool)
-          trans = adbapi.Transaction(pool, conn)
+        cursor = conn.cursor()
+        #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
+        cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (ctx.path[1:], sender))
+        cursor.close()
 
-          trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (self.path[1:], sender))
-          trans.close()
+        ctx.write(sender)
 
-        yield threads.deferToThreadPool(reactor, pool.threadpool, insert)
-
-        self.write(sender)
-
-    self.finish()
+    ctx.finish()
 
 class HTTPServer(http.HTTPChannel):
   requestFactory = Request

@@ -1,61 +1,53 @@
 #!/usr/bin/env python
 
-from mail import test
-from mail.test import equal, expect, ok
-from StringIO import StringIO
-from twisted.internet import reactor
+from cookie.test import *
+from untwisted import smtp
 
 expect(2)
 
-class Server(test.Server):
-  def do_XFORWARD(self, rest):
-    global xforward
+@sdfg
+def _():
 
-    xforward = rest
+  #@listen().then
+  @untwisted.identity(listen().then)
+  class _(smtp.server):
 
-    self.sendCode(250, 'Ok')
+    @promise.continuate
+    def start(ctx, command, state):
+      if 'EHLO' == command.verb:
+        ctx.transport.write(str(smtp.reply(250, 'example.com Requested mail action okay, completed', 'XFORWARD NAME ADDR PORT HELO PROTO SOURCE')))
 
-  def extensions(self):
-    return { 'XFORWARD': ['NAME', 'ADDR', 'PORT', 'HELO', 'PROTO', 'SOURCE'] }
+        #return ...
+        raise StopIteration(state((yield ctx.command()), state))
 
-  def validateFrom(self, helo, origin):
-    equal(xforward, 'NAME=localhost ADDR=127.0.0.1 PORT=47831 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')
+      if 'XFORWARD' == command.verb:
+        equal('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com PROTO=ESMTP SOURCE=LOCAL\r\n', str(command))
 
-    return test.Server.validateFrom(self, helo, origin)
+        ctx.transport.write(str(smtp.reply(250)))
 
-factory = test.ServerFactory()
+        #return ...
+        raise StopIteration(state((yield ctx.command()), state))
 
-protocol = Server()
-factory.protocol.append(protocol)
+      #return ...
+      raise StopIteration(smtp.server.start(ctx, command, state))
 
-reactor.listenTCP(1894, factory)
+  #@connect().then
+  @untwisted.identity(connect().then)
+  class _(smtp.client):
+    class __metaclass__(smtp.client.__metaclass__):
 
-class Client(test.Client):
-  def esmtpState_serverConfig(self, code, resp):
-    equal(resp, '''selene Hello 127.0.0.1, nice to meet you
-XFORWARD NAME ADDR PORT HELO PROTO SOURCE''')
+      @promise.continuate
+      def __call__(ctx, transport):
+        ctx = type.__call__(ctx, transport)
 
-    return test.Client.esmtpState_serverConfig(self, code, resp)
+        # Greeting
+        yield ctx.reply()
 
-  def smtpState_from(self, code, resp):
-    self.sendLine('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=47831 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')
-    self._expected = xrange(0, 1000)
-    self._okresponse = lambda code, resp: test.Client.smtpState_from(self, code, resp)
+        equal('250-example.com Requested mail action okay, completed\r\n250 XFORWARD NAME ADDR PORT HELO PROTO SOURCE\r\n', str((yield ctx.ehloCmd())))
 
-factory = test.ClientFactory()
+        ctx.transport.write(str(smtp.command('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')))
 
-protocol = Client()
-protocol.message = [{
-  'data': StringIO('''Received: from example.com (localhost [127.0.0.1])
-  by example.com (Postfix) with ESMTPA
-  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)
-From: notalice@example.com
+        yield ctx.reply()
 
-la di da
-'''),
-  'from': 'alice@example.com',
-  'to': ['bob@example.com'] }]
-
-factory.protocol.append(protocol)
-
-reactor.connectTCP('localhost', 1438, factory)
+        #return ...
+        raise StopIteration(ctx.quitCmd())

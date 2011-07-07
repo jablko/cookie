@@ -1,40 +1,25 @@
 #!/usr/bin/env python
 
-from mail.test import equal, expect, ok
-from twisted.enterprise import adbapi
-from twisted.internet import protocol, reactor, threads
+from cookie.test import *
+from twisted.internet import protocol
 from twisted.web import http
 
 expect(1)
 
-class Client(http.HTTPClient):
-  def connectionMade(self):
-    self.sendCommand('GET', '/bob@example.com')
+@sdfg
+def _():
+  cursor = conn.cursor()
+  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
+  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
+  cursor.close()
 
-    self.endHeaders()
+  @untwisted.partial(reactor.connectTCP, 'localhost', 8743)
+  @untwisted.call
+  class _(protocol.ClientFactory):
+    class protocol(http.HTTPClient):
+      def connectionMade(ctx):
+        ctx.sendCommand('GET', '/bob@example.com')
 
-  def handleResponse(self, response):
-    equal('abc123', response)
+        ctx.endHeaders()
 
-class ClientFactory(protocol.ClientFactory):
-  protocol = []
-
-  def buildProtocol(self, addr):
-    return self.protocol.pop(0)
-
-def insert():
-  conn = adbapi.Connection(pool)
-  trans = adbapi.Transaction(pool, conn)
-
-  trans.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
-  trans.close()
-
-def callback(result):
-  factory = ClientFactory()
-
-  protocol = Client()
-  factory.protocol.append(protocol)
-
-  reactor.connectTCP('localhost', 8743, factory)
-
-threads.deferToThreadPool(reactor, pool.threadpool, insert).addCallback(callback)
+      handleResponse = staticmethod(untwisted.partial(equal, 'abc123'))
