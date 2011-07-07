@@ -291,50 +291,45 @@ def _():
   while True:
     server((yield listen()))
 
-class Request(http.Request):
-  def process(ctx):
-    try:
-      qwer('/', rfc5322.addrSpec).match(ctx.path)
+@untwisted.partial(reactor.listenTCP, 8743, interface='localhost')
+@untwisted.call
+class _(http.HTTPFactory):
+  class protocol(http.HTTPChannel):
+    class requestFactory(http.Request):
+      def process(ctx):
+        try:
+          qwer('/', rfc5322.addrSpec).match(ctx.path)
 
-    except ValueError:
-      ctx.setResponseCode(http.NOT_FOUND)
+        except ValueError:
+          ctx.setResponseCode(http.NOT_FOUND)
 
-    else:
-      cursor = conn.cursor()
-      cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
-      result = cursor.fetchone()
-      cursor.close()
+        else:
+          cursor = conn.cursor()
+          cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
+          result = cursor.fetchone()
+          cursor.close()
 
-      try:
-        ctx.write(result[0])
+          try:
+            ctx.write(result[0])
 
-      except TypeError:
-        alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+          except TypeError:
+            alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
-        # Choose six letters from alphabet, at random
-        letter = random()
-        sender = ''
-        for _ in range(6):
-          letter *= len(alphabet)
-          sender += alphabet[int(letter)]
-          letter -= int(letter)
+            # Choose six letters from alphabet, at random
+            letter = random()
+            sender = ''
+            for _ in range(6):
+              letter *= len(alphabet)
+              sender += alphabet[int(letter)]
+              letter -= int(letter)
 
-        cursor = conn.cursor()
-        #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
-        cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (ctx.path[1:], sender))
-        cursor.close()
+            cursor = conn.cursor()
+            #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
+            cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (ctx.path[1:], sender))
+            cursor.close()
 
-        ctx.write(sender)
+            ctx.write(sender)
 
-    ctx.finish()
-
-class HTTPServer(http.HTTPChannel):
-  requestFactory = Request
-
-class HTTPServerFactory(http.HTTPFactory):
-  protocol = HTTPServer
-
-factory = HTTPServerFactory()
-reactor.listenTCP(8743, factory, interface='localhost')
+        ctx.finish()
 
 reactor.run()
