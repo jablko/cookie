@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+from cookie.test import *
+from untwisted import smtp
+
+expect(4)
+
+@sdfg
+def _():
+
+  #@listen().then
+  @untwisted.identity(listen().then)
+  class _(smtp.server):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.server.mail):
+
+        @promise.continuate
+        def mail(ctx, mailbox):
+          ctx.ctx.transport.write(str(smtp.reply(456, 'Expect')))
+
+          equal('MAIL FROM:<alice@example.com>\r\n', str((yield ctx.ctx.command())))
+
+        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
+        data = staticmethod(untwisted.each(lambda: equal('la di da', str((yield)))))
+
+      ctx = yield sample.__get__(ctx)()
+
+      # QUIT
+      yield smtp.server.mail.__get__(ctx)()
+
+  #@connect().then
+  @untwisted.identity(connect().then)
+  class _(smtp.client):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.client.mail):
+        mail = iter(('alice@example.com',)).next
+        recipient = iter(('bob@example.com',)).next
+        data = iter(('la di da',)).next
+
+        @promise.continuate
+        def dataCmd(ctx, data):
+          try:
+            ok(False, (yield smtp.client.mail.dataCmd(ctx, data)))
+
+          except smtp.reply as e:
+            equal('456 Expect\r\n', str(e))
+
+          #return ...
+          raise StopIteration(smtp.client.mail.dataCmd(ctx, data))
+
+      yield sample.__get__(ctx)()
+
+  return _

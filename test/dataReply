@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+
+from cookie.test import *
+from untwisted import smtp
+
+expect(3)
+
+@sdfg
+def _():
+
+  #@listen().then
+  @untwisted.identity(listen().then)
+  class _(smtp.server):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.server.mail):
+        mail = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
+        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
+
+        def data(ctx, data):
+          raise smtp.reply(234, 'Expect')
+
+      ctx = yield sample.__get__(ctx)()
+
+      # QUIT
+      yield smtp.server.mail.__get__(ctx)()
+
+  #@connect().then
+  @untwisted.identity(connect().then)
+  class _(smtp.client):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.client.mail):
+        mail = iter(('alice@example.com',)).next
+        recipient = iter(('bob@example.com',)).next
+        data = iter(('la di da',)).next
+        dataCmd = promise.compose(untwisted.partial(equal, '234 Expect\r\n'), str, smtp.client.mail.dataCmd)
+
+      yield sample.__get__(ctx)()
+
+  return _
