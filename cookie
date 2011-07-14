@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 
-import MySQLdb, sys, untwisted
+import sys, untwisted
 from qwer import *
 from random import random
 from twisted.internet import reactor
 from twisted.python import log
 from twisted.web import http
-from untwisted import promise, rfc5321, rfc5322, smtp, tcp
+from untwisted import db, promise, rfc5321, rfc5322, smtp, tcp
 
 log.startLogging(sys.stdout)
 
-conn = MySQLdb.connect(db='cookie', user='root')
+conn = db.connect(db='cookie', user='root')
 
 @untwisted.call
 @promise.continuate
@@ -86,7 +86,7 @@ def _():
               try:
                 cursor = conn.cursor()
                 cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
-                result = cursor.fetchone()
+                result = cursor.next()
 
               finally:
                 cursor.close()
@@ -142,17 +142,17 @@ def _():
           # TODO
           for msgId in msgId:
             try:
-              cursor = conn.cursor()
-              cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
-              result = cursor.fetchone()
+              try:
+                cursor = conn.cursor()
+                cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
+                result = cursor.next()
 
-            finally:
-              cursor.close()
+              finally:
+                cursor.close()
 
-            try:
               return result[0]
 
-            except TypeError:
+            except StopIteration:
               raise Exception
 
         def replace(mailbox):
@@ -217,17 +217,17 @@ def _():
 
             def asdf(recipient):
               try:
-                cursor = conn.cursor()
-                cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
-                result = cursor.fetchone()
+                try:
+                  cursor = conn.cursor()
+                  cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
+                  result = cursor.next()
 
-              finally:
-                cursor.close()
+                finally:
+                  cursor.close()
 
-              try:
                 return result[0]
 
-              except TypeError:
+              except StopIteration:
                 alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
                 # Choose six letters from alphabet, at random
@@ -319,17 +319,17 @@ class _(http.HTTPFactory):
 
         else:
           try:
-            cursor = conn.cursor()
-            cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
-            result = cursor.fetchone()
+            try:
+              cursor = conn.cursor()
+              cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
+              result = cursor.next()
 
-          finally:
-            cursor.close()
+            finally:
+              cursor.close()
 
-          try:
             ctx.write(result[0])
 
-          except TypeError:
+          except StopIteration:
             alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
 
             # Choose six letters from alphabet, at random

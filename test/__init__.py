@@ -1,10 +1,10 @@
-import MySQLdb, sys, untwisted
+import sys, untwisted
 from testify import *
 from twisted.internet import reactor
 from twisted.python import log
-from untwisted import promise, tcp
+from untwisted import db, promise, tcp
 
-conn = MySQLdb.connect(db='cookie', user='root')
+conn = db.connect(db='cookie', user='root')
 
 listen = tcp.listen(1894)
 

@@ -65,9 +65,8 @@ def _():
 try:
   cursor = conn.cursor()
   cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', '1234567890@example.com')
-  result = cursor.fetchall()
+
+  equiv((('abc123',),), cursor)
 
 finally:
   cursor.close()
-
-equal((('abc123',),), result)
