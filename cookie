@@ -152,7 +152,7 @@ def _():
             try:
               return result[0]
 
-            except IndexError:
+            except TypeError:
               raise Exception
 
         def replace(mailbox):
