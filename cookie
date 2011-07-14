@@ -83,16 +83,22 @@ def _():
 
           else:
             for recipient in ctx.recipient.__self__:
-              cursor = conn.cursor()
-              cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
-              result = cursor.fetchone()
-              cursor.close()
+              try:
+                cursor = conn.cursor()
+                cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
+                result = cursor.fetchone()
+
+              finally:
+                cursor.close()
 
               if result[0]:
-                cursor = conn.cursor()
-                #cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '@'.join(messageId), recipient.localPart)
-                cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (messageId.join('@'), recipient.localPart))
-                cursor.close()
+                try:
+                  cursor = conn.cursor()
+                  #cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '@'.join(messageId), recipient.localPart)
+                  cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (messageId.join('@'), recipient.localPart))
+
+                finally:
+                  cursor.close()
 
           try:
             yield mail.mailCmd(ctx.sender)
@@ -135,10 +141,13 @@ def _():
 
           # TODO
           for msgId in msgId:
-            cursor = conn.cursor()
-            cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
-            result = cursor.fetchone()
-            cursor.close()
+            try:
+              cursor = conn.cursor()
+              cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
+              result = cursor.fetchone()
+
+            finally:
+              cursor.close()
 
             try:
               return result[0]
@@ -207,10 +216,13 @@ def _():
             # Send/forward/proxy to one recipient, generating new sender
 
             def asdf(recipient):
-              cursor = conn.cursor()
-              cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
-              result = cursor.fetchone()
-              cursor.close()
+              try:
+                cursor = conn.cursor()
+                cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
+                result = cursor.fetchone()
+
+              finally:
+                cursor.close()
 
               try:
                 return result[0]
@@ -226,10 +238,13 @@ def _():
                   sender += alphabet[int(letter)]
                   letter -= int(letter)
 
-                cursor = conn.cursor()
-                #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
-                cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (recipient, sender))
-                cursor.close()
+                try:
+                  cursor = conn.cursor()
+                  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
+                  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (recipient, sender))
+
+                finally:
+                  cursor.close()
 
                 return sender
 
@@ -303,10 +318,13 @@ class _(http.HTTPFactory):
           ctx.setResponseCode(http.NOT_FOUND)
 
         else:
-          cursor = conn.cursor()
-          cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
-          result = cursor.fetchone()
-          cursor.close()
+          try:
+            cursor = conn.cursor()
+            cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
+            result = cursor.fetchone()
+
+          finally:
+            cursor.close()
 
           try:
             ctx.write(result[0])
@@ -322,10 +340,13 @@ class _(http.HTTPFactory):
               sender += alphabet[int(letter)]
               letter -= int(letter)
 
-            cursor = conn.cursor()
-            #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
-            cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (ctx.path[1:], sender))
-            cursor.close()
+            try:
+              cursor = conn.cursor()
+              #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
+              cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (ctx.path[1:], sender))
+
+            finally:
+              cursor.close()
 
             ctx.write(sender)
 

@@ -8,10 +8,13 @@ expect(1)
 
 @sdfg
 def _():
-  cursor = conn.cursor()
-  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
-  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
-  cursor.close()
+  try:
+    cursor = conn.cursor()
+    #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
+    cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
+
+  finally:
+    cursor.close()
 
   @untwisted.partial(reactor.connectTCP, 'localhost', 8743)
   @untwisted.call

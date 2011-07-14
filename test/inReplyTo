@@ -7,10 +7,13 @@ expect(3)
 
 @sdfg
 def _():
-  cursor = conn.cursor()
-  #cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '1234567890@example.com', 'abc123')
-  cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', ('1234567890@example.com', 'abc123'))
-  cursor.close()
+  try:
+    cursor = conn.cursor()
+    #cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '1234567890@example.com', 'abc123')
+    cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', ('1234567890@example.com', 'abc123'))
+
+  finally:
+    cursor.close()
 
   #@listen().then
   @untwisted.identity(listen().then)

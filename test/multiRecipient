@@ -7,12 +7,15 @@ expect(6)
 
 @sdfg
 def _():
-  cursor = conn.cursor()
-  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
-  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
-  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'carol@example.com', '321cba')
-  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('carol@example.com', '321cba'))
-  cursor.close()
+  try:
+    cursor = conn.cursor()
+    #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
+    cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'))
+    #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'carol@example.com', '321cba')
+    cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ('carol@example.com', '321cba'))
+
+  finally:
+    cursor.close()
 
   #@listen().then
   @untwisted.identity(listen().then)
