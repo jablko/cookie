@@ -25,11 +25,5 @@ def _():
 
   return promise.promise()
 
-try:
-  cursor = conn.cursor()
-  cursor.execute('SELECT sender FROM address')
-
-  equiv((), cursor)
-
-finally:
-  cursor.close()
+for cursor in conn:
+  equiv((), cursor.execute('SELECT sender FROM address'))

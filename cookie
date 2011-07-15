@@ -83,21 +83,12 @@ def _():
 
           else:
             for recipient in ctx.recipient.__self__:
-              try:
-                cursor = conn.cursor()
-                cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
-                count, = cursor.next()
-
-              finally:
-                cursor.close()
+              for cursor in conn:
+                count, = cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart).next()
 
               if count:
-                try:
-                  cursor = conn.cursor()
+                for cursor in conn:
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
-
-                finally:
-                  cursor.close()
 
           try:
             yield mail.mailCmd(ctx.sender)
@@ -141,13 +132,8 @@ def _():
           # TODO
           for msgId in msgId:
             try:
-              try:
-                cursor = conn.cursor()
-                cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
-                sender, = cursor.next()
-
-              finally:
-                cursor.close()
+              for cursor in conn:
+                sender, = cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@')).next()
 
             except StopIteration:
               raise Exception
@@ -216,13 +202,8 @@ def _():
 
             def asdf(recipient):
               try:
-                try:
-                  cursor = conn.cursor()
-                  cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
-                  sender, = cursor.next()
-
-                finally:
-                  cursor.close()
+                for cursor in conn:
+                  sender, = cursor.execute('SELECT sender FROM address WHERE address = %s', recipient).next()
 
               except StopIteration:
                 alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
@@ -235,12 +216,8 @@ def _():
                   sender += alphabet[int(letter)]
                   letter -= int(letter)
 
-                try:
-                  cursor = conn.cursor()
+                for cursor in conn:
                   cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
-
-                finally:
-                  cursor.close()
 
               return sender
 
@@ -315,13 +292,8 @@ class _(http.HTTPFactory):
 
         else:
           try:
-            try:
-              cursor = conn.cursor()
-              cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
-              sender, = cursor.next()
-
-            finally:
-              cursor.close()
+            for cursor in conn:
+              sender, = cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:]).next()
 
           except StopIteration:
             alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
@@ -334,12 +306,8 @@ class _(http.HTTPFactory):
               sender += alphabet[int(letter)]
               letter -= int(letter)
 
-            try:
-              cursor = conn.cursor()
+            for cursor in conn:
               cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
-
-            finally:
-              cursor.close()
 
           ctx.write(sender)
 

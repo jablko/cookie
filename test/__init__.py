@@ -13,12 +13,8 @@ connect = tcp.connect('localhost', 1438)
 def sdfg(cbl):
   log.startLogging(sys.stdout)
 
-  try:
-    cursor = conn.cursor()
+  for cursor in conn:
     cursor.execute('DELETE FROM address').execute('DELETE FROM message_id')
-
-  finally:
-    cursor.close()
 
   cbl().then(lambda *args, **kwds: reactor.stop())
 

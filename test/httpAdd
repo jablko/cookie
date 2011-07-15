@@ -19,13 +19,7 @@ def _():
         ctx.endHeaders()
 
       def handleResponse(ctx, response):
-        try:
-          cursor = conn.cursor()
-          cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com')
-
-          equiv(((response,),), cursor)
-
-        finally:
-          cursor.close()
+        for cursor in conn:
+          equiv(((response,),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
 
   return promise.promise()

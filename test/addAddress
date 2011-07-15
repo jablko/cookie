@@ -20,14 +20,8 @@ def _():
         def mail(ctx, mailbox):
           ctx.sender = mailbox
 
-          try:
-            cursor = conn.cursor()
-            cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com')
-
-            equiv(((str(mailbox.localPart),),), cursor)
-
-          finally:
-            cursor.close()
+          for cursor in conn:
+            equiv(((str(mailbox.localPart),),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
 
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
         data = lambda ctx, data: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
