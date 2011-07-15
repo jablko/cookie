@@ -61,4 +61,4 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  return _
+  yield _

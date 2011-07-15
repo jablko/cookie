@@ -62,6 +62,8 @@ def _():
 
       yield sample.__get__(ctx)()
 
+  yield _
+
   #@connect().then
   @untwisted.identity(connect().then)
   class _(smtp.client):
@@ -78,4 +80,4 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  return _
+  yield _

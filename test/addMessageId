@@ -55,7 +55,7 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  return _
+  yield _
 
 for cursor in conn:
   equiv((('abc123',),), cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', '1234567890@example.com'))

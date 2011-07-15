@@ -22,4 +22,4 @@ def _():
         for cursor in conn:
           equiv(((response,),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
 
-  return promise.promise()
+  yield promise.promise()

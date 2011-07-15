@@ -53,7 +53,7 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  return _
+  yield _
 
 for cursor in conn:
   equiv((), cursor.execute('SELECT sender FROM address WHERE address = %s', 'alice@example.com'))

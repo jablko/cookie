@@ -22,4 +22,4 @@ def _():
 
       handleResponse = staticmethod(untwisted.partial(equal, 'abc123'))
 
-  return promise.promise()
+  yield promise.promise()

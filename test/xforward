@@ -52,4 +52,4 @@ def _():
         #return ...
         raise StopIteration(ctx.quitCmd())
 
-  return _
+  yield _
