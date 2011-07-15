@@ -94,8 +94,7 @@ def _():
               if result[0]:
                 try:
                   cursor = conn.cursor()
-                  #cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '@'.join(messageId), recipient.localPart)
-                  cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', (messageId.join('@'), recipient.localPart))
+                  cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
 
                 finally:
                   cursor.close()
@@ -240,8 +239,7 @@ def _():
 
                 try:
                   cursor = conn.cursor()
-                  #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
-                  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (recipient, sender))
+                  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
 
                 finally:
                   cursor.close()
@@ -342,8 +340,7 @@ class _(http.HTTPFactory):
 
             try:
               cursor = conn.cursor()
-              #cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
-              cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', (ctx.path[1:], sender))
+              cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
 
             finally:
               cursor.close()
