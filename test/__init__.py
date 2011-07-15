@@ -15,8 +15,7 @@ def sdfg(cbl):
 
   try:
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM address')
-    cursor.execute('DELETE FROM message_id')
+    cursor.execute('DELETE FROM address').execute('DELETE FROM message_id')
 
   finally:
     cursor.close()

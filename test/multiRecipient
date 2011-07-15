@@ -9,8 +9,7 @@ expect(6)
 def _():
   try:
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
-    cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'carol@example.com', '321cba')
+    cursor.executemany('INSERT INTO address (address, sender) VALUES (%s, %s)', ('bob@example.com', 'abc123'), ('carol@example.com', '321cba'))
 
   finally:
     cursor.close()
