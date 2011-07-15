@@ -86,12 +86,12 @@ def _():
               try:
                 cursor = conn.cursor()
                 cursor.execute('SELECT COUNT(*) FROM address WHERE sender = %s', recipient.localPart)
-                result = cursor.next()
+                count, = cursor.next()
 
               finally:
                 cursor.close()
 
-              if result[0]:
+              if count:
                 try:
                   cursor = conn.cursor()
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
@@ -144,15 +144,15 @@ def _():
               try:
                 cursor = conn.cursor()
                 cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@'))
-                result = cursor.next()
+                sender, = cursor.next()
 
               finally:
                 cursor.close()
 
-              return result[0]
-
             except StopIteration:
               raise Exception
+
+            return sender
 
         def replace(mailbox):
           result = 'From:'
@@ -219,12 +219,10 @@ def _():
                 try:
                   cursor = conn.cursor()
                   cursor.execute('SELECT sender FROM address WHERE address = %s', recipient)
-                  result = cursor.next()
+                  sender, = cursor.next()
 
                 finally:
                   cursor.close()
-
-                return result[0]
 
               except StopIteration:
                 alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
@@ -244,7 +242,7 @@ def _():
                 finally:
                   cursor.close()
 
-                return sender
+              return sender
 
             # Wait for first mail, an unexpected reply falls through, aborting
             # this and additional mail.  An unexpected reply is caught and
@@ -320,12 +318,10 @@ class _(http.HTTPFactory):
             try:
               cursor = conn.cursor()
               cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:])
-              result = cursor.next()
+              sender, = cursor.next()
 
             finally:
               cursor.close()
-
-            ctx.write(result[0])
 
           except StopIteration:
             alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
@@ -345,7 +341,7 @@ class _(http.HTTPFactory):
             finally:
               cursor.close()
 
-            ctx.write(sender)
+          ctx.write(sender)
 
         ctx.finish()
 
