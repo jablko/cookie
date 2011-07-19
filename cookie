@@ -91,7 +91,7 @@ def _():
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
 
           try:
-            yield mail.mailCmd(ctx.sender)
+            reply = yield mail.mailCmd(ctx.sender)
 
           except smtp.reply as e:
             ctx.ctx.transport.write(str(e))
@@ -113,6 +113,17 @@ def _():
             reply = yield mail.dataCmd(data)
 
           except smtp.reply as e:
+
+            # Pipelining
+            try:
+              yield reply
+
+            except smtp.reply as e:
+              ctx.ctx.transport.write(str(e))
+
+              #return ...
+              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+
             ctx.ctx.transport.write(str(e))
 
             #return ...
@@ -158,7 +169,7 @@ def _():
         @promise.continuate
         def filter(*recipient):
           try:
-            yield mail.mailCmd(sender + '@nottheoilrig.com')
+            reply = yield mail.mailCmd(sender + '@nottheoilrig.com')
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
@@ -184,6 +195,17 @@ def _():
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
+
+            # Pipelining
+            try:
+              yield reply
+
+            except smtp.reply as e:
+              ctx.ctx.transport.write(str(e))
+
+              #return ...
+              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+
             ctx.ctx.transport.write(str(e))
 
             #return ...
