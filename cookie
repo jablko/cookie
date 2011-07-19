@@ -32,9 +32,9 @@ def _():
         # is in violation of SMTP specification, so advantages of this
         # optimization are vanishing
         #
-        #server.client = smtp.client(connect())
+        #server.client = smtp.pipeline(connect())
         #server.client.transport.then(untwisted.partial(setattr, server.client, 'transport'))
-        server.client = type.__call__(smtp.client, (yield connect()))
+        server.client = type.__call__(smtp.pipeline, (yield connect()))
 
         # Greeting
         transport.write(str((yield server.client.reply(untwisted.wildcard))))
