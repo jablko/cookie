@@ -33,7 +33,11 @@ def _():
       class sample(smtp.server.mail):
         mail = staticmethod(untwisted.each(lambda: equal('321cba@nottheoilrig.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
-        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
+        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+          '  by example.com (Postfix) with ESMTPA;',
+          '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          'From: 321cba@nottheoilrig.com',
+          '',
           'la di da')), (yield))))
 
       ctx = yield sample.__get__(ctx)()
