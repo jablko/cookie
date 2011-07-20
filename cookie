@@ -43,6 +43,8 @@ def _():
         #return ...
         raise StopIteration(server.mail())
 
+    reset = False
+
     class mail(smtp.server.mail):
       def __init__(ctx):
         smtp.server.mail.__init__(ctx)
@@ -58,16 +60,46 @@ def _():
           #return ...
           raise StopIteration(smtp.server.mail.start(ctx, command, state))
 
+        try:
+          ctx.ctx.reset = yield ctx.ctx.reset
+
+        except smtp.reply:
+          ctx.ctx.reset = True
+
         # Proxy all commands outside mail transaction
         ctx.ctx.client.transport.write(str(command))
 
-        ctx.ctx.transport.write(str((yield ctx.ctx.client.reply(untwisted.wildcard))))
+        try:
+          reply = yield ctx.ctx.client.reply()
+
+        except smtp.reply as reply:
+          pass
+
+        else:
+          if command.verb in ('EHLO', 'HELO', 'RSET'):
+            ctx.ctx.reset = False
+
+        ctx.ctx.transport.write(str(reply))
 
         #return ...
         raise StopIteration(state((yield ctx.ctx.command()), state))
 
       @promise.continuate
       def data(ctx, data):
+        if (yield ctx.ctx.reset):
+          ctx.ctx.client.transport.write(str(smtp.command('RSET')))
+
+          try:
+            yield ctx.ctx.client.reply()
+
+          except smtp.reply as e:
+            ctx.ctx.transport.write(str(e))
+
+            #return ...
+            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+
+          ctx.ctx.reset = False
+
         mail = type.__call__(ctx.ctx.client.mail)
 
         try:
@@ -104,30 +136,32 @@ def _():
               yield mail.rcptCmd(recipient)
 
             except smtp.reply as e:
+              ctx.ctx.reset = True
+
               ctx.ctx.transport.write(str(e))
 
               #return ...
-              raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           try:
             reply = yield mail.dataCmd(data)
 
           except smtp.reply as e:
 
-            # Pipelining
+            # Pipeline
             try:
               yield reply
 
             except smtp.reply as e:
-              ctx.ctx.transport.write(str(e))
+              pass
 
-              #return ...
-              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+            else:
+              ctx.ctx.reset = True
 
             ctx.ctx.transport.write(str(e))
 
             #return ...
-            raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           raise reply
 
@@ -184,10 +218,12 @@ def _():
 
             # Client only raises reply if unexpected/unsuccessful
             except smtp.reply as e:
+              ctx.ctx.reset = True
+
               ctx.ctx.transport.write(str(e))
 
               #return ...
-              raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           try:
             #return ...
@@ -196,20 +232,20 @@ def _():
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
 
-            # Pipelining
+            # Pipeline
             try:
               yield reply
 
             except smtp.reply as e:
-              ctx.ctx.transport.write(str(e))
+              pass
 
-              #return ...
-              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+            else:
+              ctx.ctx.reset = True
 
             ctx.ctx.transport.write(str(e))
 
             #return ...
-            raise StopIteration(ctx.afterRecipientZxcv((yield ctx.ctx.command()), ctx.afterRecipientZxcv))
+            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
@@ -256,18 +292,44 @@ def _():
 
             reply = yield filter(head)
 
+            @untwisted.partial(setattr, ctx.ctx, 'reset')
             @untwisted.call
             @promise.continuate
             def _():
+              reset = False
+
               for recipient in rest:
+                if reset:
+                  ctx.ctx.client.transport.write(str(smtp.command('RSET')))
+
+                  try:
+                    yield ctx.ctx.client.reply()
+
+                  except smtp.reply:
+
+                    # TODO Double bounce
+                    raise
+
+                  reset = False
+
                 sender = asdf(recipient)
 
                 try:
-                  yield mail.mailCmd(sender + '@nottheoilrig.com')
+                  reply = yield mail.mailCmd(sender + '@nottheoilrig.com')
 
-                  yield mail.rcptCmd(recipient)
+                  try:
+                    yield mail.rcptCmd(recipient)
 
-                  yield mail.dataCmd(rfc5322.From.replace(replace, data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
+                    yield mail.dataCmd(rfc5322.From.replace(replace, data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
+
+                  except smtp.reply:
+
+                    # Pipeline
+                    yield reply
+
+                    reset = True
+
+                    raise
 
                 # Client only raises reply if unexpected/unsuccessful
                 except smtp.reply:
@@ -275,26 +337,12 @@ def _():
                   # TODO Bounce
                   pass
 
+              #return ...
+              raise StopIteration(reset)
+
             raise reply
 
         raise (yield filter(*ctx.recipient.__self__))
-
-      @promise.continuate
-      def afterRecipientZxcv(ctx, command, state):
-        if 'DATA' == command.verb:
-          ctx.ctx.client.transport.write(str(smtp.command('RSET')))
-
-          try:
-            yield ctx.ctx.client.reply()
-
-          except smtp.reply as e:
-            ctx.ctx.transport.write(str(e))
-
-            #return ...
-            raise StopIteration(state((yield ctx.ctx.command()), state))
-
-        #return ...
-        raise StopIteration(ctx.afterRecipient(command, state))
 
   listen = tcp.listen(1438, interface='localhost')
   while True:
