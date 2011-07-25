@@ -87,10 +87,8 @@ def _():
       @promise.continuate
       def data(ctx, data):
         if (yield ctx.ctx.reset):
-          ctx.ctx.client.transport.write(str(smtp.command('RSET')))
-
           try:
-            yield ctx.ctx.client.reply()
+            rsetReply = yield ctx.ctx.client.rsetCmd()
 
           except smtp.reply as e:
             ctx.ctx.transport.write(str(e))
@@ -123,7 +121,7 @@ def _():
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
 
           try:
-            reply = yield mail.mailCmd(ctx.sender)
+            mailReply = yield mail.mailCmd(ctx.sender)
 
           except smtp.reply as e:
             ctx.ctx.transport.write(str(e))
@@ -144,18 +142,27 @@ def _():
               raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           try:
-            reply = yield mail.dataCmd(data)
+            dataReply = yield mail.dataCmd(data)
 
           except smtp.reply as e:
 
-            # Pipeline
+            # Pipeline: reset = not rsetReply or mailReply
             try:
-              yield reply
+              try:
+                yield rsetReply
+
+              except UnboundLocalError:
+                pass
+
+              try:
+                yield mailReply
+
+                ctx.ctx.reset = True
+
+              except smtp.reply as e:
+                pass
 
             except smtp.reply as e:
-              pass
-
-            else:
               ctx.ctx.reset = True
 
             ctx.ctx.transport.write(str(e))
@@ -163,7 +170,7 @@ def _():
             #return ...
             raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
-          raise reply
+          raise dataReply
 
         # Authenticated, ESMTPA
 
@@ -203,7 +210,7 @@ def _():
         @promise.continuate
         def filter(*recipient):
           try:
-            reply = yield mail.mailCmd(sender + '@nottheoilrig.com')
+            mailReply = yield mail.mailCmd(sender + '@nottheoilrig.com')
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
@@ -232,14 +239,23 @@ def _():
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
 
-            # Pipeline
+            # Pipeline: reset = not rsetReply or mailReply
             try:
-              yield reply
+              try:
+                yield rsetReply
+
+              except NameError:
+                pass
+
+              try:
+                yield mailReply
+
+                ctx.ctx.reset = True
+
+              except smtp.reply as e:
+                pass
 
             except smtp.reply as e:
-              pass
-
-            else:
               ctx.ctx.reset = True
 
             ctx.ctx.transport.write(str(e))
@@ -300,10 +316,8 @@ def _():
 
               for recipient in rest:
                 if reset:
-                  ctx.ctx.client.transport.write(str(smtp.command('RSET')))
-
                   try:
-                    yield ctx.ctx.client.reply()
+                    rsetReply = yield ctx.ctx.client.rsetCmd()
 
                   except smtp.reply:
 
@@ -315,7 +329,7 @@ def _():
                 sender = asdf(recipient)
 
                 try:
-                  reply = yield mail.mailCmd(sender + '@nottheoilrig.com')
+                  mailReply = yield mail.mailCmd(sender + '@nottheoilrig.com')
 
                   try:
                     yield mail.rcptCmd(recipient)
@@ -324,10 +338,24 @@ def _():
 
                   except smtp.reply:
 
-                    # Pipeline
-                    yield reply
+                    # Pipeline: reset = not rsetReply or mailReply
+                    try:
+                      try:
+                        yield rsetReply
 
-                    reset = True
+                      except UnboundLocaError:
+                        pass
+
+                      try:
+                        yield mailReply
+
+                        reset = True
+
+                      except smtp.reply:
+                        pass
+
+                    except smtp.reply:
+                      reset = True
 
                     raise
 
