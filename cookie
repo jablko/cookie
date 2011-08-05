@@ -205,10 +205,10 @@ def _():
 
           return result
 
-        # Filter/forward/proxy message with sender and recipient
+        # Replace sender address and send mail to one or many recipients
 
         @promise.continuate
-        def filter(*recipient):
+        def send(*recipient):
           try:
             mailReply = yield mail.mailCmd(sender + '@nottheoilrig.com')
 
@@ -306,7 +306,7 @@ def _():
             # Closure
             sender = asdf(head)
 
-            reply = yield filter(head)
+            reply = yield send(head)
 
             @untwisted.partial(setattr, ctx.ctx, 'reset')
             @untwisted.call
@@ -370,7 +370,7 @@ def _():
 
             raise reply
 
-        raise (yield filter(*ctx.recipient.__self__))
+        raise (yield send(*ctx.recipient.__self__))
 
   listen = tcp.listen(1438, interface='localhost')
   while True:
