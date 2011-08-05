@@ -11,9 +11,8 @@ def _():
   for cursor in conn:
     cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
 
-  @untwisted.partial(reactor.connectTCP, 'localhost', 8743)
   @untwisted.call
-  class _(protocol.ClientFactory):
+  class factory(protocol.ClientFactory):
     class protocol(http.HTTPClient):
       def connectionMade(ctx):
         ctx.sendCommand('GET', '/bob@example.com')
@@ -21,5 +20,7 @@ def _():
         ctx.endHeaders()
 
       handleResponse = staticmethod(untwisted.partial(equal, 'abc123'))
+
+  reactor.connectTCP('localhost', 8743, factory)
 
   yield promise.promise()

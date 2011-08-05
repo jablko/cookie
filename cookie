@@ -376,9 +376,8 @@ def _():
   while True:
     server((yield listen()))
 
-@untwisted.partial(reactor.listenTCP, 8743, interface='localhost')
 @untwisted.call
-class _(http.HTTPFactory):
+class factory(http.HTTPFactory):
   class protocol(http.HTTPChannel):
     class requestFactory(http.Request):
       def process(ctx):
@@ -410,5 +409,7 @@ class _(http.HTTPFactory):
           ctx.write(sender)
 
         ctx.finish()
+
+reactor.listenTCP(8743, factory, interface='localhost')
 
 reactor.run()

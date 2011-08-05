@@ -9,9 +9,8 @@ expect(2)
 @sdfg
 def _():
 
-  @untwisted.partial(reactor.connectTCP, 'localhost', 8743)
   @untwisted.call
-  class _(protocol.ClientFactory):
+  class factory(protocol.ClientFactory):
     class protocol(http.HTTPClient):
       def connectionMade(ctx):
         ctx.sendCommand('GET', '/notAddrSpec')
@@ -22,6 +21,8 @@ def _():
         pass
 
       handleStatus = lambda ctx, version, status, message: equal('404', status)
+
+  reactor.connectTCP('localhost', 8743, factory)
 
   yield promise.promise()
 
