@@ -272,9 +272,9 @@ def _():
 
           except Exception:
 
-            # Send/forward/proxy to one recipient, generating new sender
-
-            def asdf(recipient):
+            # Lookup sender address for recognized recipient or generate sender
+            # address for unrecognized recipient
+            def address(recipient):
               try:
                 for cursor in conn:
                   sender, = cursor.execute('SELECT sender FROM address WHERE address = %s', recipient).next()
@@ -304,7 +304,7 @@ def _():
             head, rest = ctx.recipient.__self__[0], ctx.recipient.__self__[1:]
 
             # Closure
-            sender = asdf(head)
+            sender = address(head)
 
             reply = yield send(head)
 
@@ -326,7 +326,7 @@ def _():
 
                   reset = False
 
-                sender = asdf(recipient)
+                sender = address(recipient)
 
                 try:
                   mailReply = yield mail.mailCmd(sender + '@nottheoilrig.com')
