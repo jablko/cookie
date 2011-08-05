@@ -51,9 +51,9 @@ def _():
         # before processing an upstream MAIL command, but this complicates our
         # implementation: We *must* wait for a downstream connection before
         # issuing any downstream commands.  Receiving a MAIL command before a
-        # hello command - or receiving *any* command before issuing a greeting -
-        # is in violation of SMTP specification, so advantages of this
-        # optimization are vanishing
+        # hello command - or receiving *any* command before issuing a greeting
+        # - is in violation of SMTP specification, so advantage of this
+        # optimization is vanishing
         #
         #ctx.client = smtp.pipeline(connect())
         #ctx.client.transport.then(untwisted.partial(setattr, ctx.client, 'transport'))
@@ -297,7 +297,7 @@ def _():
 
             # Wait for first mail, an unexpected reply falls through, aborting
             # this and additional mail.  An unexpected reply is caught and
-            # proxied to the incoming client.  All success replies are
+            # proxied to the upstream client.  All success replies are
             # expected, so an unexpected reply is an error
 
             #head, *rest = ctx.recipient.__self__
