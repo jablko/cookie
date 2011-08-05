@@ -1,0 +1,56 @@
+#!/usr/bin/env python
+
+from cookie.test import *
+from untwisted import smtp
+
+expect(3)
+
+@sdfg
+def _():
+  for cursor in conn:
+    cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', 'bob@example.com', 'abc123')
+
+  #@listen().then
+  @untwisted.identity(listen().then)
+  class _(smtp.server):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.server.mail):
+        mail = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
+        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
+        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+          '  by example.com (Postfix)',
+          '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          'From: notalice@example.com',
+          '',
+          'la di da')), (yield))))
+
+      ctx = yield sample.__get__(ctx)()
+
+      # QUIT
+      yield smtp.server.mail.__get__(ctx)()
+
+  #@connect().then
+  @untwisted.identity(connect().then)
+  class _(smtp.client):
+
+    @untwisted.each
+    def mail():
+      ctx = yield
+
+      class sample(smtp.client.mail):
+        mail = iter(('alice@example.com',)).next
+        recipient = iter(('bob@example.com',)).next
+        data = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+          '  by example.com (Postfix)',
+          '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          'From: notalice@example.com',
+          '',
+          'la di da')),)).next
+
+      yield sample.__get__(ctx)()
+
+  yield _

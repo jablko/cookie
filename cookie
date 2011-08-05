@@ -128,7 +128,7 @@ def _():
         protocol = 'ESMTPA'
 
         With = qwer(rfc5322.CFWS, 'with', rfc5322.FWS, protocol)
-        optInfo = qwer('(?:', rfc5321.via, ')?(?:', With, ')?(?:', rfc5321.id, ')?(?:', rfc5321.For, ')?(?:', rfc5321.additionalRegisteredClauses, ')?')
+        optInfo = qwer('(?:', rfc5321.via, ')?', With, '(?:', rfc5321.id, ')?(?:', rfc5321.For, ')?(?:', rfc5321.additionalRegisteredClauses, ')?')
         stamp = qwer(rfc5321.fromDomain, rfc5321.byDomain, optInfo, '(?:', rfc5322.CFWS, ')?;', rfc5322.FWS, rfc5322.dateTime)
         timeStampLine = qwer('Received:', rfc5322.FWS, stamp, rfc5234.CRLF)
 
