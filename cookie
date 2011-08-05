@@ -215,7 +215,7 @@ def _():
 
             return sender
 
-        def replace(mailbox):
+        def replace(sender, mailbox):
           result = 'From:'
 
           if mailbox.nameAddr:
@@ -257,7 +257,7 @@ def _():
 
           try:
             #return ...
-            raise StopIteration(mail.dataCmd(rfc5322.From.replace(replace, data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)))
+            raise StopIteration(mail.dataCmd(rfc5322.From.replace(untwisted.partial(replace, sender), data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)))
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
@@ -334,7 +334,7 @@ def _():
                   try:
                     yield mail.rcptCmd(recipient)
 
-                    yield mail.dataCmd(rfc5322.From.replace(replace, data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
+                    yield mail.dataCmd(rfc5322.From.replace(untwisted.partial(replace, sender), data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
                   except smtp.reply:
 
