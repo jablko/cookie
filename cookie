@@ -22,7 +22,7 @@ def _():
 
       @promise.continuate
       def __call__(ctx, transport):
-        server = type.__call__(ctx, transport)
+        ctx = type.__call__(ctx, transport)
 
         # Technically we needn't wait for a downstream connection or greeting
         # before processing an upstream MAIL command, but this complicates our
@@ -32,16 +32,16 @@ def _():
         # is in violation of SMTP specification, so advantages of this
         # optimization are vanishing
         #
-        #server.client = smtp.pipeline(connect())
-        #server.client.transport.then(untwisted.partial(setattr, server.client, 'transport'))
-        server.client = type.__call__(smtp.pipeline, (yield connect()))
+        #ctx.client = smtp.pipeline(connect())
+        #ctx.client.transport.then(untwisted.partial(setattr, ctx.client, 'transport'))
+        ctx.client = type.__call__(smtp.pipeline, (yield connect()))
 
         # Greeting
-        transport.write(str((yield server.client.reply(untwisted.wildcard))))
+        transport.write(str((yield ctx.client.reply(untwisted.wildcard))))
 
         # Proxy all commands outside mail transaction
         #return ...
-        raise StopIteration(server.mail())
+        raise StopIteration(ctx.mail())
 
     reset = False
 
