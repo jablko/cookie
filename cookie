@@ -12,6 +12,29 @@ log.startLogging(sys.stdout)
 
 conn = db.connect(db='cookie', user='root')
 
+# Lookup sender address for recognized recipient or generate sender address for
+# unrecognized recipient
+def address(recipient):
+  try:
+    for cursor in conn:
+      sender, = cursor.execute('SELECT sender FROM address WHERE address = %s', recipient).next()
+
+  except StopIteration:
+    alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
+
+    # Choose six letters from alphabet, at random
+    letter = random()
+    sender = ''
+    for _ in range(6):
+      letter *= len(alphabet)
+      sender += alphabet[int(letter)]
+      letter -= int(letter)
+
+    for cursor in conn:
+      cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
+
+  return sender
+
 @untwisted.call
 @promise.continuate
 def _():
@@ -272,29 +295,6 @@ def _():
 
           except Exception:
 
-            # Lookup sender address for recognized recipient or generate sender
-            # address for unrecognized recipient
-            def address(recipient):
-              try:
-                for cursor in conn:
-                  sender, = cursor.execute('SELECT sender FROM address WHERE address = %s', recipient).next()
-
-              except StopIteration:
-                alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
-
-                # Choose six letters from alphabet, at random
-                letter = random()
-                sender = ''
-                for _ in range(6):
-                  letter *= len(alphabet)
-                  sender += alphabet[int(letter)]
-                  letter -= int(letter)
-
-                for cursor in conn:
-                  cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', recipient, sender)
-
-              return sender
-
             # Wait for first mail, an unexpected reply falls through, aborting
             # this and additional mail.  An unexpected reply is caught and
             # proxied to the incoming client.  All success replies are
@@ -388,25 +388,7 @@ class factory(http.HTTPFactory):
           ctx.setResponseCode(http.NOT_FOUND)
 
         else:
-          try:
-            for cursor in conn:
-              sender, = cursor.execute('SELECT sender FROM address WHERE address = %s', ctx.path[1:]).next()
-
-          except StopIteration:
-            alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
-
-            # Choose six letters from alphabet, at random
-            letter = random()
-            sender = ''
-            for _ in range(6):
-              letter *= len(alphabet)
-              sender += alphabet[int(letter)]
-              letter -= int(letter)
-
-            for cursor in conn:
-              cursor.execute('INSERT INTO address (address, sender) VALUES (%s, %s)', ctx.path[1:], sender)
-
-          ctx.write(sender)
+          ctx.write(address(ctx.path[1:]))
 
         ctx.finish()
 
