@@ -251,9 +251,9 @@ def _():
             #return ...
             raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
-          for itm in recipient:
+          for recipient in recipient:
             try:
-              yield mail.rcpt(itm)
+              yield mail.rcpt(recipient)
 
             # Client only raises reply if unexpected/unsuccessful
             except smtp.reply as e:
