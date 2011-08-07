@@ -27,10 +27,9 @@ def _():
         data = lambda ctx, data: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA',
           '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
-          #'From: {}',
-          'From: {0}',
+          'From: ' + str(ctx.sender),
           '',
-          'la di da')).format(ctx.sender), data)
+          'la di da')), data)
 
       ctx = yield sample.__get__(ctx)()
 
