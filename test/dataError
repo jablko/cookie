@@ -17,11 +17,11 @@ def _():
       ctx = yield
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
 
         @promise.continuate
-        def data(ctx, data):
+        def content(ctx, content):
           ctx.ctx.transport.write(str(smtp.reply(456, 'Expect')))
 
           command = yield ctx.ctx.command()
@@ -34,9 +34,9 @@ def _():
       ctx = yield sample.__get__(ctx)()
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        data = staticmethod(untwisted.each(lambda: equal('la di da', str((yield)))))
+        content = staticmethod(untwisted.each(lambda: equal('la di da', str((yield)))))
 
       ctx = yield sample.__get__(ctx)()
 
@@ -52,20 +52,20 @@ def _():
       ctx = yield
 
       class sample(smtp.client.mail):
-        mail = iter(('alice@example.com',)).next
+        sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com',)).next
-        data = iter(('la di da',)).next
+        content = iter(('la di da',)).next
 
         @promise.continuate
-        def dataCmd(ctx, data):
+        def data(ctx, content):
           try:
-            ok(False, (yield smtp.client.mail.dataCmd(ctx, data)))
+            ok(False, (yield smtp.client.mail.data(ctx, content)))
 
           except smtp.reply as e:
             equal('456 Expect\r\n', str(e))
 
           #return ...
-          raise StopIteration(smtp.client.mail.dataCmd(ctx, data))
+          raise StopIteration(smtp.client.mail.data(ctx, content))
 
       yield sample.__get__(ctx)()
 

@@ -74,8 +74,8 @@ def _():
 
         ctx.recipient = [].append
 
-      def mail(ctx, mailbox):
-        ctx.sender = mailbox
+      def sender(ctx, sender):
+        ctx.sender = sender
 
       @promise.continuate
       def start(ctx, command, state):
@@ -108,10 +108,10 @@ def _():
         raise StopIteration(state((yield ctx.ctx.command()), state))
 
       @promise.continuate
-      def data(ctx, data):
+      def content(ctx, content):
         if (yield ctx.ctx.reset):
           try:
-            rsetReply = yield ctx.ctx.client.rsetCmd()
+            rsetReply = yield ctx.ctx.client.rset()
 
           except smtp.reply as e:
             ctx.ctx.transport.write(str(e))
@@ -133,12 +133,12 @@ def _():
         timeStampLine = qwer('Received:', rfc5322.FWS, stamp, rfc5234.CRLF)
 
         try:
-          timeStampLine.match(data)
+          timeStampLine.match(content)
 
         # Not authenticated, ESMTPA
         except ValueError:
           try:
-            messageId = rfc5322.messageId.search(data, 'idLeft, idRight')
+            messageId = rfc5322.messageId.search(content, 'idLeft, idRight')
 
           except ValueError:
             pass
@@ -153,7 +153,7 @@ def _():
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
 
           try:
-            mailReply = yield mail.mailCmd(ctx.sender)
+            mailReply = yield mail.mail(ctx.sender)
 
           except smtp.reply as e:
             ctx.ctx.transport.write(str(e))
@@ -163,7 +163,7 @@ def _():
 
           for recipient in ctx.recipient.__self__:
             try:
-              yield mail.rcptCmd(recipient)
+              yield mail.rcpt(recipient)
 
             except smtp.reply as e:
               ctx.ctx.reset = True
@@ -174,7 +174,7 @@ def _():
               raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           try:
-            dataReply = yield mail.dataCmd(data)
+            dataReply = yield mail.data(content)
 
           except smtp.reply as e:
 
@@ -208,7 +208,7 @@ def _():
 
         def messageId(qwer):
           try:
-            msgId = qwer.search(data, 'msgId ( idLeft, idRight )')
+            msgId = qwer.search(content, 'msgId ( idLeft, idRight )')
 
           except ValueError:
             raise Exception
@@ -242,7 +242,7 @@ def _():
         @promise.continuate
         def send(*recipient):
           try:
-            mailReply = yield mail.mailCmd(sender + '@nottheoilrig.com')
+            mailReply = yield mail.mail(sender + '@nottheoilrig.com')
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
@@ -253,7 +253,7 @@ def _():
 
           for itm in recipient:
             try:
-              yield mail.rcptCmd(itm)
+              yield mail.rcpt(itm)
 
             # Client only raises reply if unexpected/unsuccessful
             except smtp.reply as e:
@@ -266,7 +266,7 @@ def _():
 
           try:
             #return ...
-            raise StopIteration(mail.dataCmd(rfc5322.From.replace(untwisted.partial(replace, sender), data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)))
+            raise StopIteration(mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)))
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
@@ -326,7 +326,7 @@ def _():
               for recipient in rest:
                 if reset:
                   try:
-                    rsetReply = yield ctx.ctx.client.rsetCmd()
+                    rsetReply = yield ctx.ctx.client.rset()
 
                   except smtp.reply:
 
@@ -338,12 +338,12 @@ def _():
                 sender = address(recipient)
 
                 try:
-                  mailReply = yield mail.mailCmd(sender + '@nottheoilrig.com')
+                  mailReply = yield mail.mail(sender + '@nottheoilrig.com')
 
                   try:
-                    yield mail.rcptCmd(recipient)
+                    yield mail.rcpt(recipient)
 
-                    yield mail.dataCmd(rfc5322.From.replace(untwisted.partial(replace, sender), data, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
+                    yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
                   except smtp.reply:
 

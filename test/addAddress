@@ -17,19 +17,19 @@ def _():
       ctx = yield
 
       class sample(smtp.server.mail):
-        def mail(ctx, mailbox):
-          ctx.sender = mailbox
+        def sender(ctx, sender):
+          ctx.sender = sender
 
           for cursor in conn:
-            equiv(((str(mailbox.localPart),),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
+            equiv(((str(sender.localPart),),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
 
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        data = lambda ctx, data: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = lambda ctx, content: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA',
           '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: ' + str(ctx.sender),
           '',
-          'la di da')), data)
+          'la di da')), content)
 
       ctx = yield sample.__get__(ctx)()
 
@@ -45,9 +45,9 @@ def _():
       ctx = yield
 
       class sample(smtp.client.mail):
-        mail = iter(('alice@example.com',)).next
+        sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com',)).next
-        data = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA',
           '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: notalice@example.com',

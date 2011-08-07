@@ -19,9 +19,9 @@ def _():
       ctx = yield
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('abc123@nottheoilrig.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('abc123@nottheoilrig.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA;',
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: abc123@nottheoilrig.com',
@@ -31,9 +31,9 @@ def _():
       ctx = yield sample.__get__(ctx)()
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('321cba@nottheoilrig.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('321cba@nottheoilrig.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
-        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA;',
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: 321cba@nottheoilrig.com',
@@ -54,9 +54,9 @@ def _():
       ctx = yield
 
       class sample(smtp.client.mail):
-        mail = iter(('alice@example.com',)).next
+        sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com', 'carol@example.com')).next
-        data = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA;',
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: notalice@example.com',

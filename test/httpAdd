@@ -17,9 +17,9 @@ def _():
 
         ctx.endHeaders()
 
-      def handleResponse(ctx, response):
+      def handleResponse(ctx, body):
         for cursor in conn:
-          equiv(((response,),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
+          equiv(((body,),), cursor.execute('SELECT sender FROM address WHERE address = %s', 'bob@example.com'))
 
   reactor.connectTCP('localhost', 8743, factory)
 

@@ -17,10 +17,10 @@ def _():
       ctx = yield
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
 
-        def data(ctx, data):
+        def content(ctx, content):
           raise smtp.reply(234, 'Expect')
 
       ctx = yield sample.__get__(ctx)()
@@ -37,10 +37,10 @@ def _():
       ctx = yield
 
       class sample(smtp.client.mail):
-        mail = iter(('alice@example.com',)).next
+        sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com',)).next
-        data = iter(('la di da',)).next
-        dataCmd = promise.compose(untwisted.partial(equal, '234 Expect\r\n'), str, smtp.client.mail.dataCmd)
+        content = iter(('la di da',)).next
+        data = promise.compose(untwisted.partial(equal, '234 Expect\r\n'), str, smtp.client.mail.data)
 
       yield sample.__get__(ctx)()
 

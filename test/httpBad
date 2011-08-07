@@ -17,10 +17,10 @@ def _():
 
         ctx.endHeaders()
 
-      def handleResponse(ctx, response):
+      def handleResponse(ctx, body):
         pass
 
-      handleStatus = lambda ctx, version, status, message: equal('404', status)
+      handleStatus = lambda ctx, version, code, phrase: equal('404', code)
 
   reactor.connectTCP('localhost', 8743, factory)
 

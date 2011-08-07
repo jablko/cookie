@@ -14,9 +14,9 @@ def _():
       ctx = yield
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('dave@example.com', str((yield)))))
-        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
+        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
           'da di la')), (yield))))
 
       ctx = yield sample.__get__(ctx)()
@@ -25,9 +25,9 @@ def _():
       ctx = yield smtp.server.mail.__get__(ctx)()
 
       class sample(smtp.server.mail):
-        mail = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        data = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
+        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
           'la di da')), (yield))))
 
       ctx = yield sample.__get__(ctx)()
@@ -54,9 +54,9 @@ def _():
       ctx = yield
 
       class sample(smtp.client.mail):
-        mail = iter(('alice@example.com',)).next
+        sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com',)).next
-        data = iter(('\r\n'.join(('',
+        content = iter(('\r\n'.join(('',
           'la di da')),)).next
 
       yield sample.__get__(ctx)()
@@ -72,9 +72,9 @@ def _():
       ctx = yield
 
       class sample(smtp.client.mail):
-        mail = iter(('carol@example.com',)).next
+        sender = iter(('carol@example.com',)).next
         recipient = iter(('dave@example.com',)).next
-        data = iter(('\r\n'.join(('',
+        content = iter(('\r\n'.join(('',
           'da di la')),)).next
 
       yield sample.__get__(ctx)()

@@ -43,13 +43,13 @@ def _():
         # Greeting
         yield ctx.reply()
 
-        equal('250-example.com Requested mail action okay, completed\r\n250 XFORWARD NAME ADDR PORT HELO PROTO SOURCE\r\n', str((yield ctx.ehloCmd())))
+        equal('250-example.com Requested mail action okay, completed\r\n250 XFORWARD NAME ADDR PORT HELO PROTO SOURCE\r\n', str((yield ctx.ehlo())))
 
         ctx.transport.write(str(smtp.command('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com PROTO=ESMTP SOURCE=LOCAL')))
 
         yield ctx.reply()
 
         #return ...
-        raise StopIteration(ctx.quitCmd())
+        raise StopIteration(ctx.quit())
 
   yield _
