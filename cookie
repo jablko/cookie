@@ -202,7 +202,7 @@ def _():
             #return ...
             raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
-          raise dataReply
+          raise (yield dataReply)
 
         # Authenticated, ESMTPA
 
@@ -295,7 +295,7 @@ def _():
             raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           #return ...
-          raise StopIteration(dataReply)
+          raise StopIteration(promise.promise()(dataReply))
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
@@ -379,9 +379,9 @@ def _():
               #return ...
               raise StopIteration(reset)
 
-            raise reply
+            raise (yield reply)
 
-        raise (yield send(*ctx.recipient.__self__))
+        raise (yield (yield send(*ctx.recipient.__self__)))
 
   listen = tcp.listen(1438, interface='localhost')
   while True:
