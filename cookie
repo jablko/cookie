@@ -265,8 +265,7 @@ def _():
               raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
 
           try:
-            #return ...
-            raise StopIteration(mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)))
+            dataReply = yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
           # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
@@ -294,6 +293,9 @@ def _():
 
             #return ...
             raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+
+          #return ...
+          raise StopIteration(dataReply)
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
