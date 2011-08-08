@@ -40,7 +40,7 @@ def _():
         sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com',)).next
         content = iter(('la di da',)).next
-        data = promise.compose(untwisted.partial(equal, '234 Expect\r\n'), str, smtp.client.mail.data)
+        data = untwisted.compose(untwisted.partial(promise.promise.then, callback=untwisted.compose(untwisted.partial(equal, '234 Expect\r\n'), str)), smtp.client.mail.data)
 
       yield sample.__get__(ctx)()
 
