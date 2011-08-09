@@ -83,26 +83,26 @@ def _():
           #return ...
           raise StopIteration(smtp.server.mail.start(ctx, command, state))
 
-        try:
-          ctx.ctx.reset = yield ctx.ctx.reset
+        ctx.ctx.reset = yield ctx.ctx.reset
 
-        except smtp.reply:
-          ctx.ctx.reset = True
+        if command.verb in ('EHLO', 'HELO', 'RSET'):
+          ctx.ctx.reset = False
 
         # Proxy all commands outside mail transaction
         ctx.ctx.client.transport.write(str(command))
 
-        try:
-          reply = yield ctx.ctx.client.reply()
+        @promise.continuate
+        def reply(command):
+          try:
+            reply = yield ctx.ctx.client.reply()
 
-        except smtp.reply as reply:
-          pass
+          except smtp.reply as reply:
+            if command.verb in ('EHLO', 'HELO', 'RSET'):
+              ctx.ctx.reset = True
 
-        else:
-          if command.verb in ('EHLO', 'HELO', 'RSET'):
-            ctx.ctx.reset = False
+          ctx.ctx.transport.write(str(reply))
 
-        ctx.ctx.transport.write(str(reply))
+        reply(command)
 
         #return ...
         raise StopIteration(state((yield ctx.ctx.command()), state))
@@ -110,7 +110,7 @@ def _():
       @promise.continuate
       def content(ctx, content):
         if (yield ctx.ctx.reset):
-          rsetReply = ctx.ctx.client.rset()
+          ctx.ctx.client.rset().then(lambda _: setattr(ctx.ctx, 'reset', False))
 
         mail = type.__call__(ctx.ctx.client.mail)
 
@@ -143,41 +143,17 @@ def _():
                 for cursor in conn:
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
 
-          mailReply = mail.mail(ctx.sender)
+          mail.mail(ctx.sender).then(lambda _: setattr(ctx.ctx, 'reset', True))
 
           for recipient in ctx.recipient.__self__:
             mail.rcpt(recipient)
 
-          try:
-            dataReply = yield mail.data(content)
+          (yield mail.data(content)).then(untwisted.compose(ctx.ctx.transport.write, str))
 
-          except smtp.reply as e:
+          ctx.ctx.reset = False
 
-            # Pipeline: reset = not rsetReply or mailReply
-            try:
-              try:
-                yield rsetReply
-
-              except UnboundLocalError:
-                pass
-
-              try:
-                yield mailReply
-
-                ctx.ctx.reset = True
-
-              except smtp.reply as e:
-                ctx.ctx.reset = False
-
-            except smtp.reply as e:
-              ctx.ctx.reset = True
-
-            ctx.ctx.transport.write(str(e))
-
-            #return ...
-            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
-
-          raise (yield dataReply)
+          #return ...
+          raise StopIteration(ctx.ctx.mail())
 
         # Authenticated, ESMTPA
 
@@ -216,42 +192,12 @@ def _():
 
         @promise.continuate
         def send(*recipient):
-          mailReply = mail.mail(sender + '@nottheoilrig.com')
+          mail.mail(sender + '@nottheoilrig.com').then(lambda _: setattr(ctx.ctx, 'reset', True))
 
           for recipient in recipient:
             mail.rcpt(recipient)
 
-          try:
-            dataReply = yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
-
-          except smtp.reply as e:
-
-            # Pipeline: reset = not rsetReply or mailReply
-            try:
-              try:
-                yield rsetReply
-
-              except NameError:
-                pass
-
-              try:
-                yield mailReply
-
-                ctx.ctx.reset = True
-
-              except smtp.reply as e:
-                ctx.ctx.reset = False
-
-            except smtp.reply as e:
-              ctx.ctx.reset = True
-
-            ctx.ctx.transport.write(str(e))
-
-            #return ...
-            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
-
-          #return ...
-          raise StopIteration(promise.promise()(dataReply))
+          (yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))).then(untwisted.compose(ctx.ctx.transport.write, str))
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
@@ -273,12 +219,15 @@ def _():
             # Closure
             sender = address(head)
 
-            reply = yield send(head)
+            yield send(head)
 
             @untwisted.partial(setattr, ctx.ctx, 'reset')
             @untwisted.call
             @promise.continuate
             def _():
+
+              # We only get this far if head mail transaction is complete -
+              # though we don't yet know whether it's an error
               reset = False
 
               for recipient in rest:
@@ -296,33 +245,35 @@ def _():
 
                 except smtp.reply:
 
-                  # Pipeline: reset = not rsetReply or mailReply
+                  # Damn, can't rebind reset in nested scope!
+
                   try:
-                    try:
-                      yield rsetReply
+                    yield rsetReply
 
-                    except UnboundLocaError:
-                      pass
+                    reset = False
 
-                    try:
-                      yield mailReply
+                  except (smtp.reply, UnboundLocalError):
+                    pass
 
-                      reset = True
+                  try:
+                    yield mailReply
 
-                    except smtp.reply:
-                      reset = False
+                    reset = True
 
                   except smtp.reply:
-                    reset = True
+                    pass
 
                   # TODO Bounce
 
               #return ...
               raise StopIteration(reset)
 
-            raise (yield reply)
+            #return ...
+            raise StopIteration(ctx.ctx.mail())
 
-        raise (yield (yield send(*ctx.recipient.__self__)))
+        yield send(*ctx.recipient.__self__)
+
+        ctx.ctx.reset = False
 
   listen = tcp.listen(1438, interface='localhost')
   while True:
