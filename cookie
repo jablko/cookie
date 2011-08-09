@@ -110,16 +110,7 @@ def _():
       @promise.continuate
       def content(ctx, content):
         if (yield ctx.ctx.reset):
-          try:
-            rsetReply = yield ctx.ctx.client.rset()
-
-          except smtp.reply as e:
-            ctx.ctx.transport.write(str(e))
-
-            #return ...
-            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
-
-          ctx.ctx.reset = False
+          rsetReply = ctx.ctx.client.rset()
 
         mail = type.__call__(ctx.ctx.client.mail)
 
@@ -152,26 +143,10 @@ def _():
                 for cursor in conn:
                   cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', messageId.join('@'), recipient.localPart)
 
-          try:
-            mailReply = yield mail.mail(ctx.sender)
-
-          except smtp.reply as e:
-            ctx.ctx.transport.write(str(e))
-
-            #return ...
-            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+          mailReply = mail.mail(ctx.sender)
 
           for recipient in ctx.recipient.__self__:
-            try:
-              yield mail.rcpt(recipient)
-
-            except smtp.reply as e:
-              ctx.ctx.reset = True
-
-              ctx.ctx.transport.write(str(e))
-
-              #return ...
-              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+            mail.rcpt(recipient)
 
           try:
             dataReply = yield mail.data(content)
@@ -192,7 +167,7 @@ def _():
                 ctx.ctx.reset = True
 
               except smtp.reply as e:
-                pass
+                ctx.ctx.reset = False
 
             except smtp.reply as e:
               ctx.ctx.reset = True
@@ -241,33 +216,14 @@ def _():
 
         @promise.continuate
         def send(*recipient):
-          try:
-            mailReply = yield mail.mail(sender + '@nottheoilrig.com')
-
-          # Client only raises reply if unexpected/unsuccessful
-          except smtp.reply as e:
-            ctx.ctx.transport.write(str(e))
-
-            #return ...
-            raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+          mailReply = mail.mail(sender + '@nottheoilrig.com')
 
           for recipient in recipient:
-            try:
-              yield mail.rcpt(recipient)
-
-            # Client only raises reply if unexpected/unsuccessful
-            except smtp.reply as e:
-              ctx.ctx.reset = True
-
-              ctx.ctx.transport.write(str(e))
-
-              #return ...
-              raise StopIteration(ctx.afterRecipient((yield ctx.ctx.command()), ctx.afterRecipient))
+            mail.rcpt(recipient)
 
           try:
             dataReply = yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
-          # Client only raises reply if unexpected/unsuccessful
           except smtp.reply as e:
 
             # Pipeline: reset = not rsetReply or mailReply
@@ -284,7 +240,7 @@ def _():
                 ctx.ctx.reset = True
 
               except smtp.reply as e:
-                pass
+                ctx.ctx.reset = False
 
             except smtp.reply as e:
               ctx.ctx.reset = True
@@ -327,54 +283,39 @@ def _():
 
               for recipient in rest:
                 if reset:
-                  try:
-                    rsetReply = yield ctx.ctx.client.rset()
-
-                  except smtp.reply:
-
-                    # TODO Double bounce
-                    raise
-
-                  reset = False
+                  rsetReply = ctx.ctx.client.rset()
 
                 sender = address(recipient)
 
+                mailReply = mail.mail(sender + '@nottheoilrig.com')
+
+                mail.rcpt(recipient)
+
                 try:
-                  mailReply = yield mail.mail(sender + '@nottheoilrig.com')
+                  yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
-                  try:
-                    yield mail.rcpt(recipient)
-
-                    yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
-
-                  except smtp.reply:
-
-                    # Pipeline: reset = not rsetReply or mailReply
-                    try:
-                      try:
-                        yield rsetReply
-
-                      except UnboundLocaError:
-                        pass
-
-                      try:
-                        yield mailReply
-
-                        reset = True
-
-                      except smtp.reply:
-                        pass
-
-                    except smtp.reply:
-                      reset = True
-
-                    raise
-
-                # Client only raises reply if unexpected/unsuccessful
                 except smtp.reply:
 
+                  # Pipeline: reset = not rsetReply or mailReply
+                  try:
+                    try:
+                      yield rsetReply
+
+                    except UnboundLocaError:
+                      pass
+
+                    try:
+                      yield mailReply
+
+                      reset = True
+
+                    except smtp.reply:
+                      reset = False
+
+                  except smtp.reply:
+                    reset = True
+
                   # TODO Bounce
-                  pass
 
               #return ...
               raise StopIteration(reset)
