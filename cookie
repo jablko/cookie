@@ -163,16 +163,20 @@ def _():
           except ValueError:
             raise Exception
 
-          # TODO
+          # In-Reply-To and References can each contain multiple message ids,
+          # but mail can have only one envelope sender.  Iterate over message
+          # ids until an associated sender address is found and return it
           for msgId in msgId:
             try:
               for cursor in conn:
                 sender, = cursor.execute('SELECT sender FROM message_id WHERE message_id = %s', msgId['*'].join('@')).next()
 
-            except StopIteration:
-              raise Exception
+              return sender
 
-            return sender
+            except StopIteration:
+              pass
+
+          raise Exception
 
         def replace(sender, mailbox):
           result = 'From:'
