@@ -66,8 +66,6 @@ def _():
         #return ...
         raise StopIteration(ctx.mail())
 
-    asdf = None
-
     reset = False
 
     class mail(smtp.server.mail):
@@ -79,9 +77,9 @@ def _():
       def sender(ctx, sender):
         ctx.sender = sender
 
-        # Finish replying to any previous upstream mail transaction before
-        # replying to upstream client
-        return ctx.ctx.asdf
+        # Finish replying to any previous command before replying to upstream
+        # client
+        return ctx.ctx.client.head
 
       @promise.continuate
       def start(ctx, command, state):
@@ -165,7 +163,7 @@ def _():
 
             ctx.ctx.transport.write(str(reply))
 
-          ctx.ctx.asdf = (yield mail.data(content)).then(callback)
+          (yield mail.data(content)).then(callback)
 
           ctx.ctx.reset = False
 
@@ -239,10 +237,10 @@ def _():
             # Closure
             sender = address(head)
 
-            ctx.ctx.asdf = yield send(head)
+            yield send(head)
 
             if rest:
-              ctx.ctx.asdf.then(untwisted.compose(ctx.ctx.transport.write, str))
+              ctx.ctx.client.head.then(untwisted.compose(ctx.ctx.transport.write, str))
 
               @promise.continuate
               def sendRest():
@@ -313,7 +311,7 @@ def _():
 
                 ctx.ctx.transport.write(str(reply))
 
-              ctx.ctx.asdf.then(callback)
+              ctx.ctx.client.head.then(callback)
 
             #return ...
             raise StopIteration(ctx.ctx.mail())
@@ -328,7 +326,7 @@ def _():
 
           ctx.ctx.transport.write(str(reply))
 
-        ctx.ctx.asdf = (yield send(*ctx.recipient.__self__)).then(callback)
+        (yield send(*ctx.recipient.__self__)).then(callback)
 
         ctx.ctx.reset = False
 
