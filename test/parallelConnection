@@ -41,7 +41,7 @@ def _():
   def timeout(secs, *args, **kwds):
     ctx = promise.promise()
 
-    reactor.callLater(secs, untwisted.partial(ctx, *args, **kwds))
+    reactor.callLater(secs, untwisted.partial(ctx, *args or (None,), **kwds))
 
     return ctx
 
