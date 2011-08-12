@@ -21,22 +21,23 @@ def _():
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
 
         @promise.continuate
-        def content(ctx, content):
-          ctx.ctx.transport.write(str(smtp.reply(456, 'Expect')))
+        def afterRecipient(ctx, command, state):
+          if 'DATA' == command.verb:
+            ctx.ctx.transport.write(str(smtp.reply(456, 'Expect')))
 
-          command = yield ctx.ctx.command()
+            command = yield ctx.ctx.command()
 
-          equal('RSET\r\n', str(command))
+            equal('RSET\r\n', str(command))
 
           #return ...
-          raise StopIteration(ctx.afterRecipient(command, ctx.afterRecipient))
+          raise StopIteration(smtp.server.mail.afterRecipient(ctx, command, state))
 
       ctx = yield sample.__get__(ctx)()
 
       class sample(smtp.server.mail):
-        sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
-        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        content = staticmethod(untwisted.each(lambda: equal('la di da', str((yield)))))
+        sender = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
+        recipient = staticmethod(untwisted.each(lambda: equal('dave@example.com', str((yield)))))
+        content = staticmethod(untwisted.each(lambda: equal('da di la', str((yield)))))
 
       ctx = yield sample.__get__(ctx)()
 
@@ -56,16 +57,18 @@ def _():
         recipient = iter(('bob@example.com',)).next
         content = iter(('la di da',)).next
 
-        @promise.continuate
-        def data(ctx, content):
-          try:
-            ok(False, (yield smtp.client.mail.data(ctx, content)))
+      sample = sample.__get__(ctx)()
 
-          except smtp.reply as e:
-            equal('456 Expect\r\n', str(e))
+      @sample.then
+      class _:
+        throw = staticmethod(lambda type, value, traceback: equal('456 Expect\r\n', str(value)))
 
-          #return ...
-          raise StopIteration(smtp.client.mail.data(ctx, content))
+      ctx = yield sample
+
+      class sample(smtp.client.mail):
+        sender = iter(('carol@example.com',)).next
+        recipient = iter(('dave@example.com',)).next
+        content = iter(('da di la',)).next
 
       yield sample.__get__(ctx)()
 

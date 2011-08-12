@@ -22,10 +22,10 @@ def _():
         def sender(ctx, sender):
           ctx.ctx.transport.write(str(smtp.reply(456, 'Expect')))
 
-          equal('MAIL FROM:<alice@example.com>\r\n', str((yield ctx.ctx.command())))
+          equal('MAIL FROM:<carol@example.com>\r\n', str((yield ctx.ctx.command())))
 
-        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        content = staticmethod(untwisted.each(lambda: equal('la di da', str((yield)))))
+        recipient = staticmethod(untwisted.each(lambda: equal('dave@example.com', str((yield)))))
+        content = staticmethod(untwisted.each(lambda: equal('da di la', str((yield)))))
 
       ctx = yield sample.__get__(ctx)()
 
@@ -45,16 +45,18 @@ def _():
         recipient = iter(('bob@example.com',)).next
         content = iter(('la di da',)).next
 
-        @promise.continuate
-        def data(ctx, content):
-          try:
-            ok(False, (yield smtp.client.mail.data(ctx, content)))
+      sample = sample.__get__(ctx)()
 
-          except smtp.reply as e:
-            equal('456 Expect\r\n', str(e))
+      @sample.then
+      class _:
+        throw = staticmethod(lambda type, value, traceback: equal('456 Expect\r\n', str(value)))
 
-          #return ...
-          raise StopIteration(smtp.client.mail.data(ctx, content))
+      ctx = yield sample
+
+      class sample(smtp.client.mail):
+        sender = iter(('carol@example.com',)).next
+        recipient = iter(('dave@example.com',)).next
+        content = iter(('da di la',)).next
 
       yield sample.__get__(ctx)()
 
