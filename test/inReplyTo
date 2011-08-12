@@ -23,7 +23,7 @@ def _():
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
         content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA',
-          '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          '  for <notBob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: abc123@nottheoilrig.com',
           'In-Reply-To: <1234567890@example.com>',
           '',
@@ -47,8 +47,8 @@ def _():
         recipient = iter(('bob@example.com',)).next
         content = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA',
-          '  for <notbob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
-          'From: notalice@example.com',
+          '  for <notBob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
+          'From: notAlice@example.com',
           'In-Reply-To: <1234567890@example.com>',
           '',
           'la di da')),)).next

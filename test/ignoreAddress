@@ -24,7 +24,7 @@ def _():
         content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTP',
           '  for <abc123@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
-          'From: notalice@example.com',
+          'From: notAlice@example.com',
           '',
           'la di da')), (yield))))
 
@@ -47,7 +47,7 @@ def _():
         content = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTP',
           '  for <abc123@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
-          'From: notalice@example.com',
+          'From: notAlice@example.com',
           '',
           'la di da')),)).next
 
