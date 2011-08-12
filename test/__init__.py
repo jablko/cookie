@@ -26,3 +26,10 @@ def sdfg(cbl):
 
   reactor.callLater(2, reactor.stop)
   reactor.run()
+
+def timeout(secs, *args, **kwds):
+  ctx = promise.promise()
+
+  reactor.callLater(secs, untwisted.partial(ctx, *args or (None,), **kwds))
+
+  return ctx

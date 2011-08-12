@@ -66,6 +66,8 @@ def _():
         #return ...
         raise StopIteration(ctx.mail())
 
+    asdf = None
+
     reset = False
 
     class mail(smtp.server.mail):
@@ -77,12 +79,18 @@ def _():
       def sender(ctx, sender):
         ctx.sender = sender
 
+        # Finish replying to any previous upstream mail transaction before
+        # replying to upstream client
+        return ctx.ctx.asdf
+
       @promise.continuate
       def start(ctx, command, state):
         if 'MAIL' == command.verb:
           #return ...
           raise StopIteration(smtp.server.mail.start(ctx, command, state))
 
+        # Finish sending any previous downstream mail transaction before
+        # issuing any more commands to downstream server
         ctx.ctx.reset = yield ctx.ctx.reset
 
         if command.verb in ('EHLO', 'HELO', 'RSET'):
@@ -147,7 +155,7 @@ def _():
           for recipient in ctx.recipient.__self__:
             mail.rcpt(recipient)
 
-          (yield mail.data(content)).then(untwisted.compose(ctx.ctx.transport.write, str))
+          ctx.ctx.asdf = (yield mail.data(content)).then(untwisted.compose(ctx.ctx.transport.write, str))
 
           ctx.ctx.reset = False
 
@@ -193,14 +201,13 @@ def _():
 
         # Replace sender address and send mail to one or many recipients
 
-        @promise.continuate
         def send(*recipient):
           mail.mail(sender + '@nottheoilrig.com').then(lambda _: setattr(ctx.ctx, 'reset', True))
 
           for recipient in recipient:
             mail.rcpt(recipient)
 
-          (yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))).then(untwisted.compose(ctx.ctx.transport.write, str))
+          return mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)).then(untwisted.compose(promise.promise(), untwisted.partial(promise.promise.then, callback=untwisted.compose(ctx.ctx.transport.write, str))))
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
@@ -222,7 +229,7 @@ def _():
             # Closure
             sender = address(head)
 
-            yield send(head)
+            ctx.ctx.asdf = yield send(head)
 
             @untwisted.partial(setattr, ctx.ctx, 'reset')
             @untwisted.call
@@ -274,7 +281,7 @@ def _():
             #return ...
             raise StopIteration(ctx.ctx.mail())
 
-        yield send(*ctx.recipient.__self__)
+        ctx.ctx.asdf = yield send(*ctx.recipient.__self__)
 
         ctx.ctx.reset = False
 

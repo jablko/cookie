@@ -38,13 +38,6 @@ def _():
   listen().then(sample)
   listen().then(sample)
 
-  def timeout(secs, *args, **kwds):
-    ctx = promise.promise()
-
-    reactor.callLater(secs, untwisted.partial(ctx, *args or (None,), **kwds))
-
-    return ctx
-
   #@connect().then(untwisted.partial(timeout, 1)).then
   @untwisted.identity(connect().then(untwisted.partial(timeout, 1)).then)
   class _(smtp.client):
