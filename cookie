@@ -91,10 +91,9 @@ def _():
         # Proxy all commands outside mail transaction
         ctx.ctx.client.transport.write(str(command))
 
-        @promise.continuate
-        def reply(command):
+        def callback(command):
           try:
-            reply = yield ctx.ctx.client.reply()
+            reply = yield
 
           except smtp.reply as reply:
             if command.verb in ('EHLO', 'HELO', 'RSET'):
@@ -102,7 +101,7 @@ def _():
 
           ctx.ctx.transport.write(str(reply))
 
-        reply(command)
+        ctx.ctx.client.reply().then(untwisted.head(lambda: callback(command)))
 
         #return ...
         raise StopIteration(state((yield ctx.ctx.command()), state))
