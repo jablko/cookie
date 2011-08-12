@@ -3,78 +3,103 @@
 from cookie.test import *
 from untwisted import smtp
 
-expect(7)
+expect(21)
 
 @sdfg
 def _():
 
   #@listen().then
   @untwisted.identity(listen().then)
-  class _(smtp.server):
+  @promise.continuate
+  def _(transport):
+    transport.write('220\r\n')
 
-    @untwisted.each
-    def mail():
-      ctx = yield
+    equal('EHLO example.com\r\n', (yield transport.protocol.dataReceived.shift()))
 
-      class sample(smtp.server.mail):
-        sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
-        recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
+    transport.write('250\r\n')
 
-        @staticmethod
-        @untwisted.each
-        def content():
-          equal('\r\n'.join(('',
-            'la di da')), (yield))
+    equal('MAIL FROM:<alice@example.com>\r\n', (yield transport.protocol.dataReceived.shift()))
 
-          result = timeout(1)
+    transport.write('250\r\n')
 
-          @result.then
-          def _(_):
-            raise smtp.reply(456, 'Expect')
+    equal('RCPT TO:<bob@example.com>\r\n', (yield transport.protocol.dataReceived.shift()))
 
-          yield result
+    transport.write('250\r\n')
 
-      ctx = yield sample.__get__(ctx)()
+    equal('DATA\r\n', (yield transport.protocol.dataReceived.shift()))
 
-      class sample(smtp.server.mail):
-        sender = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
-        recipient = staticmethod(untwisted.each(lambda: equal('dave@example.com', str((yield)))))
-        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('',
-          'da di la')), (yield))))
+    transport.write('354\r\n')
 
-      ctx = yield sample.__get__(ctx)()
+    equal('la di da\r\n.\r\n', (yield transport.protocol.dataReceived.shift()))
 
-      # QUIT
-      yield smtp.server.mail.__get__(ctx)()
+    yield timeout(1)
+
+    transport.write('456 Expect\r\n')
+
+    equal('MAIL FROM:<carol@example.com>\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('250\r\n')
+
+    equal('RCPT TO:<dave@example.com>\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('250\r\n')
+
+    equal('DATA\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('354\r\n')
+
+    equal('da di la\r\n.\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('250\r\n')
+
+    equal('QUIT\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('221\r\n')
 
   #@connect().then
   @untwisted.identity(connect().then)
-  class _(smtp.client):
+  @promise.continuate
+  def _(transport):
+    equal('220\r\n', (yield transport.protocol.dataReceived.shift()))
 
-    @untwisted.each
-    def mail():
-      ctx = yield
+    transport.write('EHLO example.com\r\n')
 
-      class sample(smtp.client.mail):
-        sender = iter(('alice@example.com',)).next
-        recipient = iter(('bob@example.com',)).next
-        content = iter(('\r\n'.join(('',
-          'la di da')),)).next
+    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
 
-      sample = sample.__get__(ctx)()
+    transport.write('MAIL FROM:<alice@example.com>\r\n')
 
-      @sample.then
-      class _:
-        throw = staticmethod(lambda type, value, traceback: equal('456 Expect\r\n', str(value)))
+    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
 
-      ctx = yield sample
+    transport.write('RCPT TO:<bob@example.com>\r\n')
 
-      class sample(smtp.client.mail):
-        sender = iter(('carol@example.com',)).next
-        recipient = iter(('dave@example.com',)).next
-        content = iter(('\r\n'.join(('',
-          'da di la')),)).next
+    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
 
-      yield sample.__get__(ctx)()
+    transport.write('DATA\r\n')
+
+    equal('354 Start mail input; end with <CRLF>.<CRLF>\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('la di da\r\n.\r\n')
+
+    equal('456 Expect\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('MAIL FROM:<carol@example.com>\r\n')
+
+    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('RCPT TO:<dave@example.com>\r\n')
+
+    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('DATA\r\n')
+
+    equal('354 Start mail input; end with <CRLF>.<CRLF>\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('da di la\r\n.\r\n')
+
+    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+
+    transport.write('QUIT\r\n')
+
+    equal('221 Service closing transmission channel\r\n', (yield transport.protocol.dataReceived.shift()))
 
   yield _
