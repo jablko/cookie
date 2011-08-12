@@ -155,7 +155,17 @@ def _():
           for recipient in ctx.recipient.__self__:
             mail.rcpt(recipient)
 
-          ctx.ctx.asdf = (yield mail.data(content)).then(untwisted.compose(ctx.ctx.transport.write, str))
+          @untwisted.head
+          def callback():
+            try:
+              reply = yield
+
+            except smtp.reply as reply:
+              pass
+
+            ctx.ctx.transport.write(str(reply))
+
+          ctx.ctx.asdf = (yield mail.data(content)).then(callback)
 
           ctx.ctx.reset = False
 
@@ -207,7 +217,7 @@ def _():
           for recipient in recipient:
             mail.rcpt(recipient)
 
-          return mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1)).then(untwisted.compose(promise.promise(), untwisted.partial(promise.promise.then, callback=untwisted.compose(ctx.ctx.transport.write, str))))
+          return mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
 
         try:
           sender = yield messageId(rfc5322.inReplyTo)
@@ -231,57 +241,94 @@ def _():
 
             ctx.ctx.asdf = yield send(head)
 
-            @untwisted.partial(setattr, ctx.ctx, 'reset')
-            @untwisted.call
-            @promise.continuate
-            def _():
+            if rest:
+              ctx.ctx.asdf.then(untwisted.compose(ctx.ctx.transport.write, str))
 
-              # We only get this far if head mail transaction is complete -
-              # though we don't yet know whether it's an error
-              reset = False
+              @promise.continuate
+              def sendRest():
 
-              for recipient in rest:
-                if reset:
-                  rsetReply = ctx.ctx.client.rset()
+                # We only get this far if head mail transaction is complete -
+                # though we don't yet know whether it's an error
+                reset = False
 
-                sender = address(recipient)
+                for recipient in rest:
+                  if reset:
+                    rsetReply = ctx.ctx.client.rset()
 
-                mailReply = mail.mail(sender + '@nottheoilrig.com')
+                  sender = address(recipient)
 
-                mail.rcpt(recipient)
+                  mailReply = mail.mail(sender + '@nottheoilrig.com')
 
-                try:
-                  yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))
+                  mail.rcpt(recipient)
 
-                except smtp.reply:
+                  @untwisted.head
+                  def callback():
+                    try:
+                      yield
 
-                  # Damn, can't rebind reset in nested scope!
+                    except smtp.reply:
 
-                  try:
-                    yield rsetReply
-
-                    reset = False
-
-                  except (smtp.reply, UnboundLocalError):
-                    pass
+                      # TODO Bounce
+                      pass
 
                   try:
-                    yield mailReply
-
-                    reset = True
+                    (yield mail.data(rfc5322.From.replace(untwisted.partial(replace, sender), content, 'mailbox ( nameAddr, displayName, CFWS, localPart, dotAtomText, DQUOTE, domain )', count=1))).then(callback)
 
                   except smtp.reply:
-                    pass
 
-                  # TODO Bounce
+                    # Damn, can't rebind reset in nested scope!
 
-              #return ...
-              raise StopIteration(reset)
+                    try:
+                      yield rsetReply
+
+                      reset = False
+
+                    except (smtp.reply, UnboundLocalError):
+                      pass
+
+                    try:
+                      yield mailReply
+
+                      reset = True
+
+                    except smtp.reply:
+                      pass
+
+                    # TODO Bounce
+
+                #return ...
+                raise StopIteration(reset)
+
+              ctx.ctx.reset = sendRest()
+
+            else:
+
+              @untwisted.head
+              def callback():
+                try:
+                  reply = yield
+
+                except smtp.reply as reply:
+                  pass
+
+                ctx.ctx.transport.write(str(reply))
+
+              ctx.ctx.asdf.then(callback)
 
             #return ...
             raise StopIteration(ctx.ctx.mail())
 
-        ctx.ctx.asdf = yield send(*ctx.recipient.__self__)
+        @untwisted.head
+        def callback():
+          try:
+            reply = yield
+
+          except smtp.reply as reply:
+            pass
+
+          ctx.ctx.transport.write(str(reply))
+
+        ctx.ctx.asdf = (yield send(*ctx.recipient.__self__)).then(callback)
 
         ctx.ctx.reset = False
 
