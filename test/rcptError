@@ -58,15 +58,15 @@ def _():
 
     transport.write('EHLO example.com\r\n')
 
-    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('MAIL FROM:<alice@example.com>\r\n')
 
-    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250 2.1.0 Success\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('RCPT TO:<bob@example.com>\r\n')
 
-    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250 2.1.5 Destination address valid\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('DATA\r\n')
 
@@ -78,11 +78,11 @@ def _():
 
     transport.write('MAIL FROM:<carol@example.com>\r\n')
 
-    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250 2.1.0 Success\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('RCPT TO:<dave@example.com>\r\n')
 
-    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250 2.1.5 Destination address valid\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('DATA\r\n')
 
@@ -90,10 +90,10 @@ def _():
 
     transport.write('da di la\r\n.\r\n')
 
-    equal('250 Requested mail action okay, completed\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('QUIT\r\n')
 
-    equal('221 Service closing transmission channel\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('221\r\n', (yield transport.protocol.dataReceived.shift()))
 
   yield _
