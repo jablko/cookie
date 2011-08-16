@@ -3,7 +3,7 @@
 from cookie.test import *
 from untwisted import smtp
 
-expect(3)
+expect(4)
 
 @sdfg
 def _():
@@ -20,7 +20,11 @@ def _():
         sender = staticmethod(untwisted.each(lambda: equal('alice@example.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
 
-        def content(ctx, content):
+        @staticmethod
+        @untwisted.each
+        def content():
+          equal('Expect', str((yield)))
+
           raise smtp.reply(234, 'Expect')
 
       ctx = yield sample.__get__(ctx)()
@@ -39,7 +43,7 @@ def _():
       class sample(smtp.client.mail):
         sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com',)).next
-        content = iter(('la di da',)).next
+        content = iter(('Expect',)).next
 
       yield sample.__get__(ctx)().then(untwisted.compose(untwisted.partial(equal, '234 Expect\r\n'), str))
 

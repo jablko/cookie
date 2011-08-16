@@ -29,7 +29,7 @@ def _():
           '  for <notBob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: ' + str(ctx.sender),
           '',
-          'la di da')), content)
+          'Expect')), content)
 
       ctx = yield sample.__get__(ctx)()
 
@@ -52,7 +52,7 @@ def _():
           '  for <notBob@example.com>; Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: notAlice@example.com',
           '',
-          'la di da')),)).next
+          'Expect')),)).next
 
       yield sample.__get__(ctx)()
 

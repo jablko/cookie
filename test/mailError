@@ -34,7 +34,7 @@ def _():
 
     transport.write('354\r\n')
 
-    equal('da di la\r\n.\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('Expect\r\n.\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('250\r\n')
 
@@ -64,7 +64,7 @@ def _():
 
     equal('354 Start mail input; end with <CRLF>.<CRLF>\r\n', (yield transport.protocol.dataReceived.shift()))
 
-    transport.write('la di da\r\n.\r\n')
+    transport.write('Content\r\n.\r\n')
 
     equal('456 Expect\r\n', (yield transport.protocol.dataReceived.shift()))
 
@@ -80,7 +80,7 @@ def _():
 
     equal('354 Start mail input; end with <CRLF>.<CRLF>\r\n', (yield transport.protocol.dataReceived.shift()))
 
-    transport.write('da di la\r\n.\r\n')
+    transport.write('Expect\r\n.\r\n')
 
     equal('250\r\n', (yield transport.protocol.dataReceived.shift()))
 

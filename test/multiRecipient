@@ -26,7 +26,7 @@ def _():
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: abc123@nottheoilrig.com',
           '',
-          'la di da')), (yield))))
+          'Expect')), (yield))))
 
       ctx = yield sample.__get__(ctx)()
 
@@ -38,7 +38,7 @@ def _():
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: 321cba@nottheoilrig.com',
           '',
-          'la di da')), (yield))))
+          'Expect')), (yield))))
 
       ctx = yield sample.__get__(ctx)()
 
@@ -61,7 +61,7 @@ def _():
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: notAlice@example.com',
           '',
-          'la di da')),)).next
+          'Expect')),)).next
 
       yield sample.__get__(ctx)()
 

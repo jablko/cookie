@@ -27,7 +27,7 @@ def _():
           'From: abc123@nottheoilrig.com',
           'In-Reply-To: <1234567890@example.com>',
           '',
-          'la di da')), (yield))))
+          'Expect')), (yield))))
 
       ctx = yield sample.__get__(ctx)()
 
@@ -51,7 +51,7 @@ def _():
           'From: notAlice@example.com',
           'In-Reply-To: <1234567890@example.com>',
           '',
-          'la di da')),)).next
+          'Expect')),)).next
 
       yield sample.__get__(ctx)()
 
