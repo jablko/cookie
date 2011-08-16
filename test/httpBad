@@ -24,7 +24,7 @@ def _():
 
   reactor.connectTCP('localhost', 8743, factory)
 
-  yield promise.promise()
+  return promise.promise()
 
 for cursor in conn:
   equiv((), cursor.execute('SELECT sender FROM address'))

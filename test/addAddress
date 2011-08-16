@@ -10,7 +10,7 @@ def _():
 
   #@listen().then
   @untwisted.identity(listen().then)
-  class _(smtp.server):
+  class server(smtp.server):
 
     @untwisted.each
     def mail():
@@ -38,7 +38,7 @@ def _():
 
   #@connect().then
   @untwisted.identity(connect().then)
-  class _(smtp.client):
+  class client(smtp.client):
 
     @untwisted.each
     def mail():
@@ -56,4 +56,4 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  yield _
+  return client

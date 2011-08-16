@@ -7,7 +7,7 @@ expect(6)
 
 @sdfg
 def _():
-  class sample(smtp.server):
+  class server(smtp.server):
 
     @untwisted.each
     def mail():
@@ -33,12 +33,12 @@ def _():
       # QUIT
       yield smtp.server.mail.__get__(ctx)()
 
-  listen().then(sample)
-  listen().then(sample)
+  listen().then(server)
+  listen().then(server)
 
   #@connect().then(untwisted.partial(timeout, 1)).then
   @untwisted.identity(connect().then(untwisted.partial(timeout, 1)).then)
-  class _(smtp.client):
+  class a(smtp.client):
 
     @untwisted.each
     def mail():
@@ -51,11 +51,9 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  yield _
-
   #@connect().then
   @untwisted.identity(connect().then)
-  class _(smtp.client):
+  class b(smtp.client):
 
     @untwisted.each
     def mail():
@@ -68,4 +66,4 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  yield _
+  return promise.join(a, b)

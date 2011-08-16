@@ -23,4 +23,4 @@ def _():
 
   reactor.connectTCP('localhost', 8743, factory)
 
-  yield promise.promise()
+  return promise.promise()
