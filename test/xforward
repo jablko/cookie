@@ -16,9 +16,9 @@ def _():
 
     equal('EHLO example.com\r\n', (yield transport.protocol.dataReceived.shift()))
 
-    transport.write('250-example.com Success\r\n250 XFORWARD NAME ADDR PORT HELO PROTO SOURCE\r\n')
+    transport.write('250-example.com Success\r\n250 XFORWARD NAME ADDR PROTO HELO SOURCE PORT IDENT\r\n')
 
-    equal('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com PROTO=ESMTP SOURCE=LOCAL\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com IDENT=[UNAVAILABLE] PROTO=ESMTP SOURCE=LOCAL\r\n', (yield transport.protocol.dataReceived.shift()))
 
     transport.write('250\r\n')
 
@@ -34,9 +34,9 @@ def _():
 
     transport.write('EHLO example.com\r\n')
 
-    equal('250-example.com Success\r\n250 XFORWARD NAME ADDR PORT HELO PROTO SOURCE\r\n', (yield transport.protocol.dataReceived.shift()))
+    equal('250-example.com Success\r\n250 XFORWARD NAME ADDR PROTO HELO SOURCE PORT IDENT\r\n', (yield transport.protocol.dataReceived.shift()))
 
-    transport.write('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com PROTO=ESMTP SOURCE=LOCAL\r\n')
+    transport.write('XFORWARD NAME=localhost ADDR=127.0.0.1 PORT=1234 HELO=example.com IDENT=[UNAVAILABLE] PROTO=ESMTP SOURCE=LOCAL\r\n')
 
     equal('250\r\n', (yield transport.protocol.dataReceived.shift()))
 
