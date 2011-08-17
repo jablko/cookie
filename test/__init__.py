@@ -16,7 +16,8 @@ def sdfg(cbl):
   for cursor in conn:
     cursor.execute('DELETE FROM address').execute('DELETE FROM message_id')
 
-  cbl().then(lambda *_: reactor.stop())
+  # Test complete whether success or exception
+  cbl().then(promise.promise()).then(lambda _: reactor.stop())
 
   @untwisted.call
   @promise.continuate
