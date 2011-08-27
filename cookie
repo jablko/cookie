@@ -338,15 +338,18 @@ def _():
 class factory(http.HTTPFactory):
   class protocol(http.HTTPChannel):
     class requestFactory(http.Request):
-      def process(ctx):
+      def requestReceived(ctx, method, resource, version):
+        ctx.client = ctx.channel.transport.getPeer()
+        ctx.clientproto = version
+
         try:
-          qwer('/', rfc5322.addrSpec).match(ctx.path)
+          qwer('/', rfc5322.addrSpec).match(resource)
 
         except ValueError:
           ctx.setResponseCode(http.NOT_FOUND)
 
         else:
-          ctx.write(address(ctx.path[1:]))
+          ctx.write(address(resource[1:]))
 
         ctx.finish()
 
