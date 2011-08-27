@@ -36,14 +36,14 @@ def address(recipient):
   return sender
 
 @untwisted.call
-@promise.continuate
+@promise.resume
 def _():
   connect = tcp.connect('localhost', 1894)
 
   class server(smtp.server):
     class __metaclass__(smtp.server.__metaclass__):
 
-      @promise.continuate
+      @promise.resume
       def __call__(ctx, transport):
         ctx = type.__call__(ctx, transport)
 
@@ -81,7 +81,7 @@ def _():
         # client
         return ctx.ctx.client.head
 
-      @promise.continuate
+      @promise.resume
       def start(ctx, command, state):
         if 'MAIL' == command.verb:
           #return ...
@@ -112,7 +112,7 @@ def _():
         #return ...
         raise StopIteration(state((yield ctx.ctx.command()), state))
 
-      @promise.continuate
+      @promise.resume
       def content(ctx, content):
         if (yield ctx.ctx.reset):
           ctx.ctx.client.rset().then(lambda _: setattr(ctx.ctx, 'reset', False))
@@ -242,7 +242,7 @@ def _():
             if rest:
               ctx.ctx.client.head.then(untwisted.compose(ctx.ctx.transport.write, str))
 
-              @promise.continuate
+              @promise.resume
               def sendRest():
 
                 # We only get this far if head mail transaction is complete -

@@ -20,7 +20,7 @@ def sdfg(cbl):
   cbl().then(promise.promise()).then(lambda _: reactor.stop())
 
   @untwisted.call
-  @promise.continuate
+  @promise.resume
   def _():
     while True:
       ok(False, (yield listen()))
