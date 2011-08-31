@@ -21,7 +21,8 @@ def _():
       class sample(smtp.server.mail):
         sender = staticmethod(untwisted.each(lambda: equal('abc123@nottheoilrig.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('bob@example.com', str((yield)))))
-        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join((
+          'Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA;',
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: abc123@nottheoilrig.com',
@@ -33,7 +34,8 @@ def _():
       class sample(smtp.server.mail):
         sender = staticmethod(untwisted.each(lambda: equal('321cba@nottheoilrig.com', str((yield)))))
         recipient = staticmethod(untwisted.each(lambda: equal('carol@example.com', str((yield)))))
-        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = staticmethod(untwisted.each(lambda: equal('\r\n'.join((
+          'Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA;',
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: 321cba@nottheoilrig.com',
@@ -56,7 +58,8 @@ def _():
       class sample(smtp.client.mail):
         sender = iter(('alice@example.com',)).next
         recipient = iter(('bob@example.com', 'carol@example.com')).next
-        content = iter(('\r\n'.join(('Received: from example.com (localhost [127.0.0.1])',
+        content = iter(('\r\n'.join((
+          'Received: from example.com (localhost [127.0.0.1])',
           '  by example.com (Postfix) with ESMTPA;',
           '  Fri, 13 Feb 2009 15:31:30 -0800 (PST)',
           'From: notAlice@example.com',
