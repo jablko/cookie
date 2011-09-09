@@ -121,7 +121,7 @@ def _():
 
         # Upstream client authenticated,
         # http://thread.gmane.org/gmane.mail.postfix.user/215958
-        protocol = 'ESMTPA'
+        protocol = '(?:ESMTPA|ESMTPSA)'
 
         With = qwer(rfc5322.CFWS, 'with', rfc5322.FWS, protocol)
         optInfo = qwer('(?:', rfc5321.via, ')?', With, '(?:', rfc5321.id, ')?(?:', rfc5321.For, ')?(?:', rfc5321.additionalRegisteredClauses, ')?')
