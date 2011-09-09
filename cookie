@@ -198,10 +198,10 @@ def _():
           result = 'From:'
 
           if mailbox.nameAddr:
-            result += str(mailbox.displayName) + str(mailbox['nameAddr > CFWS:first-child']) + '<' + str(mailbox['localPart > CFWS:first-child']) + sender + str(mailbox['localPart > * + CFWS']) + '@' + str(mailbox['domain > CFWS:first-child']) + 'nottheoilrig.com' + str(mailbox['domain > * + CFWS']) + '>' + str(mailbox['nameAddr > * + CFWS'])
+            result += str(mailbox.displayName) + str(mailbox['displayName + CFWS']) + '<' + str(mailbox['localPart CFWS:first-child']) + sender + str(mailbox['localPart * + CFWS']) + '@' + str(mailbox['domain CFWS:first-child']) + 'nottheoilrig.com' + str(mailbox['domain * + CFWS']) + '>' + str(mailbox['domain + CFWS'])
 
           else:
-            result += str(mailbox['localPart > CFWS:first-child']) + sender + str(mailbox['localPart > * + CFWS']) + '@' + str(mailbox['domain > CFWS:first-child']) + 'nottheoilrig.com' + str(mailbox['domain > * + CFWS'])
+            result += str(mailbox['localPart CFWS:first-child']) + sender + str(mailbox['localPart * + CFWS']) + '@' + str(mailbox['domain CFWS:first-child']) + 'nottheoilrig.com' + str(mailbox['domain * + CFWS'])
 
           result += '\r\n'
 
