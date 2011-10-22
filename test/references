@@ -10,7 +10,7 @@ def _():
   for cursor in conn:
     cursor.execute('INSERT INTO message_id (message_id, sender) VALUES (%s, %s)', '1234567890@example.com', 'abc123')
 
-  #@listen().then
+  #@...
   @untwisted.identity(listen().then)
   class server(smtp.server):
 
@@ -35,7 +35,7 @@ def _():
       # QUIT
       yield smtp.server.mail.__get__(ctx)()
 
-  #@connect().then
+  #@...
   @untwisted.identity(connect().then)
   class client(smtp.client):
 

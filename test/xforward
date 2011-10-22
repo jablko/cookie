@@ -8,7 +8,7 @@ expect(7)
 @sdfg
 def _():
 
-  #@listen().then
+  #@...
   @untwisted.identity(listen().then)
   @promise.resume
   def server(transport):
@@ -26,7 +26,7 @@ def _():
 
     transport.write('221\r\n')
 
-  #@connect().then
+  #@...
   @untwisted.identity(connect().then)
   @promise.resume
   def client(transport):

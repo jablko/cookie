@@ -8,7 +8,7 @@ expect(4)
 @sdfg
 def _():
 
-  #@listen().then
+  #@...
   @untwisted.identity(listen().then)
   class server(smtp.server):
 
@@ -32,7 +32,7 @@ def _():
       # QUIT
       yield smtp.server.mail.__get__(ctx)()
 
-  #@connect().then
+  #@...
   @untwisted.identity(connect().then)
   class client(smtp.client):
 

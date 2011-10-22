@@ -36,7 +36,7 @@ def _():
   listen().then(server)
   listen().then(server)
 
-  #@connect().then(untwisted.partial(timeout, 1)).then
+  #@...
   @untwisted.identity(connect().then(untwisted.partial(timeout, 1)).then)
   class a(smtp.client):
 
@@ -51,7 +51,7 @@ def _():
 
       yield sample.__get__(ctx)()
 
-  #@connect().then
+  #@...
   @untwisted.identity(connect().then)
   class b(smtp.client):
 
